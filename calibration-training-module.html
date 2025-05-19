@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Calibration Training Module</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #1a1a1a;
+      color: #e6e6e6;
+      margin: 0;
+      padding: 20px;
+    }
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #222;
+      border-radius: 8px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+    header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    h1 {
+      color: #a74e9e;
+      margin-bottom: 5px;
+    }
+    .subtitle {
+      color: #888;
+      margin-top: 5px;
+    }
+    .section-title {
+      color: #a74e9e;
+      border-bottom: 1px solid #444;
+      padding-bottom: 10px;
+      margin-bottom: 20px;
+    }
+    .step {
+      background: #2a2a2a;
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    }
+    .step h3 {
+      color: #a74e9e;
+      margin-top: 0;
+    }
+    .step img {
+      width: 100%;
+      max-width: 350px;
+      border-radius: 8px;
+      margin: 1rem 0;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+      display: block;
+    }
+    .quiz-container {
+      background: #333;
+      padding: 1.5rem;
+      border-radius: 8px;
+      margin-top: 2rem;
+    }
+    .quiz-question {
+      margin-bottom: 1.5rem;
+    }
+    .quiz-options {
+      margin-left: 1rem;
+    }
+    .option {
+      margin: 8px 0;
+      padding: 10px;
+      background: #444;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .option:hover {
+      background: #555;
+    }
+    .option.selected {
+      background: #a74e9e;
+      color: #fff;
+    }
+    .option.correct {
+      background: #4caf50;
+      color: #fff;
+    }
+    .option.incorrect {
+      background: #f44336;
+      color: #fff;
+    }
+    .submit-btn, .retake-btn, .start-quiz-btn {
+      padding: 10px 20px;
+      background: #a74e9e;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-top: 20px;
+      transition: background 0.3s;
+    }
+    .submit-btn:hover, .start-quiz-btn:hover {
+      background: #8a3a7e;
+    }
+    .retake-btn {
+      background: #f44336;
+      margin-left: 10px;
+    }
+    .feedback {
+      margin-top: 20px;
+      padding: 10px;
+      border-radius: 4px;
+      display: none;
+    }
+    .feedback.success {
+      background: rgba(76, 175, 80, 0.3);
+      border: 1px solid #4caf50;
+    }
+    .feedback.error {
+      background: rgba(244, 67, 54, 0.3);
+      border: 1px solid #f44336;
+    }
+    @media (max-width: 600px) {
+      .container { padding: 5px; }
+      .step { padding: 1rem; }
+    }
+    @media print {
+      body {
+        background-color: white !important;
+        color: black !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      
+      @page {
+        size: A4;
+        margin: 0;
+      }
+      
+      .container {
+        background-color: white !important;
+        box-shadow: none !important;
+        max-width: 100% !important;
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+      
+      .container > *, .quiz-container, .step, .section-title, .subtitle, header, .advanced-tips, .feedback, .submit-btn, .retake-btn, .print-btn {
+        display: none !important;
+      }
+      
+      .certificate {
+        display: block !important;
+        width: 100% !important;
+        height: 100vh !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        background: white !important;
+        overflow: hidden !important;
+        box-shadow: none !important;
+        border: none !important;
+        page-break-inside: avoid !important;
+        page-break-after: always !important;
+      }
+      
+      .certificate-content {
+        display: block !important;
+        position: relative !important;
+        margin: 10mm auto !important;
+        padding: 15mm !important;
+        border: 15px solid #a74e9e !important;
+        width: calc(100% - 50mm) !important;
+        height: calc(100vh - 50mm) !important;
+        box-sizing: border-box !important;
+        background-color: white !important;
+        color: black !important;
+        overflow: hidden !important;
+      }
+      
+      .certificate-header {
+        text-align: center !important;
+        margin-bottom: 20mm !important;
+      }
+      
+      .certificate-body {
+        text-align: center !important;
+      }
+      
+      .certificate-footer {
+        position: absolute !important;
+        bottom: 15mm !important;
+        left: 0 !important;
+        right: 0 !important;
+        text-align: center !important;
+      }
+      
+      .certificate-title {
+        color: #a74e9e !important;
+        display: block !important;
+        font-size: 36px !important;
+        margin-bottom: 5mm !important;
+      }
+      
+      .certificate-subtitle {
+        color: #666 !important;
+        display: block !important;
+        font-size: 26px !important;
+        margin-bottom: 15mm !important;
+      }
+      
+      .certificate-text {
+        color: black !important;
+        display: block !important;
+        font-size: 18px !important;
+        margin: 3mm 0 !important;
+      }
+      
+      .certificate-name {
+        color: #a74e9e !important;
+        display: block !important;
+        font-size: 32px !important;
+        font-weight: bold !important;
+        margin: 10mm 0 !important;
+      }
+      
+      .certificate-results {
+        width: 80% !important;
+        margin: 10mm auto !important;
+        border-collapse: collapse !important;
+        color: black !important;
+        display: table !important;
+      }
+      
+      .certificate-results th,
+      .certificate-results td {
+        border: 1px solid #a74e9e !important;
+        padding: 8px !important;
+        display: table-cell !important;
+        font-size: 16px !important;
+      }
+      
+      .certificate-seal {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 100px !important;
+        height: 100px !important;
+        margin: 10mm auto !important;
+        border: 3px solid #a74e9e !important;
+        border-radius: 50% !important;
+        background-color: white !important;
+        color: #a74e9e !important;
+        font-weight: bold !important;
+        font-size: 18px !important;
+      }
+      
+      .certificate-date {
+        color: #666 !important;
+        display: block !important;
+        margin-bottom: 5mm !important;
+        font-size: 16px !important;
+      }
+      
+      .certificate-signature {
+        color: #a74e9e !important;
+        display: block !important;
+        font-weight: bold !important;
+        font-size: 22px !important;
+      }
+      
+      .result-grade.pass {
+        color: #4caf50 !important;
+        font-weight: bold !important;
+      }
+    }
+    .certificate {
+      display: none;
+      text-align: center;
+      margin-top: 30px;
+      padding: 30px;
+      border: 2px solid #a74e9e;
+      border-radius: 8px;
+      background-color: #f9f9f9;
+      color: #333;
+    }
+
+    .certificate-content {
+      border: 10px solid #a74e9e;
+      padding: 30px;
+      margin-bottom: 20px;
+    }
+
+    .certificate-title {
+      font-size: 28px;
+      margin-top: 0;
+      margin-bottom: 10px;
+      color: #a74e9e;
+    }
+
+    .certificate-subtitle {
+      font-size: 20px;
+      margin-bottom: 20px;
+      color: #666;
+    }
+
+    .certificate-text {
+      font-size: 14px;
+      margin-bottom: 10px;
+      color: #333;
+    }
+
+    .certificate-name {
+      font-size: 24px;
+      margin: 15px 0;
+      color: #a74e9e;
+    }
+
+    .certificate-results {
+      margin: 15px auto;
+      width: 80%;
+      border-collapse: collapse;
+    }
+
+    .certificate-results th,
+    .certificate-results td {
+      padding: 8px;
+      border: 1px solid #a74e9e;
+      text-align: center;
+    }
+
+    .certificate-results th {
+      background-color: #a74e9e;
+      color: white;
+    }
+
+    .result-grade.pass {
+      color: #4caf50;
+      font-weight: bold;
+    }
+
+    .result-grade.fail {
+      color: #f44336;
+      font-weight: bold;
+    }
+
+    .certificate-seal {
+      width: 80px;
+      height: 80px;
+      margin: 10px auto;
+      background-color: #a74e9e;
+      color: white;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 14px;
+    }
+
+    .certificate-date {
+      margin-top: 20px;
+      color: #666;
+    }
+
+    .certificate-signature {
+      margin-top: 30px;
+      color: #a74e9e;
+      font-weight: bold;
+    }
+
+    .print-btn {
+      padding: 10px 20px;
+      background: #a74e9e;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      transition: background-color 0.3s;
+    }
+
+    .print-btn:hover {
+      background-color: #8a3a7e;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Calibration Training Module</h1>
+      <p class="subtitle">Learn how to calibrate your <strong>pellet-fed extruder</strong> for accurate material throughput</p>
+    </header>
+
+    <div style="background:#f44336; color:#fff; padding:10px 18px; border-radius:6px; margin-bottom:22px; font-weight:bold;">
+      Note: This guide is for <u>pellet-fed extruders</u> only. It does not apply to filament-based 3D printers.
+    </div>
+
+    <div class="section-title">Introduction & Background</div>
+    <p>
+      <strong>What is Throughput Calibration?</strong><br>
+      Throughput calibration is the process of determining the precise relationship between your pellet extruder's motor speed (RPM) and the amount of pellets it delivers (throughput, usually in kg/hr or g/min). This relationship is essential for accurate 3D printing, as it ensures the correct amount of material is deposited for each movement of the print head.
+    </p>
+    <p>
+      <strong>Why is Calibration Important?</strong><br>
+      Without proper calibration, your pellet printer may extrude too much or too little material, leading to poor print quality, dimensional inaccuracies, weak parts, or even equipment damage. Calibration compensates for differences in pellet properties, nozzle size, and machine wear, making your prints more reliable and repeatable.
+    </p>
+    <p>
+      <strong>What Happens if You Skip or Rush Calibration?</strong><br>
+      - <em>Over-extrusion</em>: Too much material, causing blobs, stringing, or poor surface finish.<br>
+      - <em>Under-extrusion</em>: Too little material, resulting in gaps, weak layers, or failed prints.<br>
+      - <em>Inconsistent bead width</em>: Affects part strength and dimensional accuracy.<br>
+      - <em>Material waste</em>: Incorrect settings can waste expensive pellets.<br>
+    </p>
+    <p>
+      <strong>When Should You Calibrate?</strong><br>
+      - When using a new pellet material or batch<br>
+      - After changing the nozzle size<br>
+      - If you notice print quality issues<br>
+      - After major maintenance or hardware changes
+    </p>
+
+    <div class="section-title">Calibration Knowledge</div>
+    <ul>
+      <li><strong>Throughput:</strong> The amount of pellets delivered by the extruder per unit time (e.g., kg/hr, g/min).</li>
+      <li><strong>Steady State:</strong> The point at which the pellet extruder is running smoothly and material flow is consistent (usually after 1 minute of extrusion).</li>
+      <li><strong>Calibration Curve:</strong> A mathematical relationship (often a polynomial) between motor speed and throughput, used to set accurate print parameters.</li>
+      <li><strong>Why Polynomial?</strong> The relationship between RPM and throughput is often non-linear due to pellet properties, back pressure, and machine dynamics. A polynomial fit (curve) gives more accurate results than a simple linear equation.</li>
+      <li><strong>Best Practices:</strong> Always dry your pellets, use a precise scale, and take multiple measurements at different speeds for the most accurate calibration.</li>
+    </ul>
+
+    <div class="section-title">Learning Objectives</div>
+    <ul>
+      <li>Understand the importance of calibration for extrusion accuracy</li>
+      <li>Identify required equipment and preparation steps</li>
+      <li>Follow a step-by-step calibration procedure</li>
+      <li>Record and interpret calibration data</li>
+      <li>Apply best practices for safe and effective calibration</li>
+    </ul>
+
+    <div class="section-title">Step-by-Step Calibration Guide</div>
+
+    <div class="step">
+      <h3>Step 1: Prepare Your Equipment</h3>
+      <ul>
+        <li>Purging bucket</li>
+        <li>Weighing scales</li>
+        <li>Stopwatch or timer</li>
+        <li>Knife or scissors</li>
+        <li>Pellet material to be calibrated (properly dried)</li>
+      </ul>
+      <!-- Example image, replace src with your own if available -->
+      <img src="Cal-images/plasic on scales .jpg" alt="Equipment setup">
+      <p style="font-size:0.95em;color:#aaa;">Equipment setup with scales ready for measurement</p>
+    </div>
+
+    <div class="step">
+      <h3>Step 2: Start Calibration Program</h3>
+      <ul>
+        <li>Load the pellet material into your system</li>
+        <li>Start the calibration program on the robot or control panel</li>
+        <li>Set test speeds (e.g., 20%, 40%, 60%, 80%, 100% of max speed)</li>
+      </ul>
+      <img src="Cal-images/starting calibartion prog.jpg" alt="Starting calibration program">
+      <p style="font-size:0.95em;color:#aaa;">Starting the calibration program on the robot</p>
+    </div>
+
+    <div class="step">
+      <h3>Step 3: Program Setup</h3>
+      <ul>
+        <li>Verify program settings and pellet material loading</li>
+        <li>Check temperature and speed parameters</li>
+        <li>Ensure purge bucket is in place</li>
+      </ul>
+      <img src="Cal-images/close up of programe start on the robot .jpg" alt="Program setup">
+      <p style="font-size:0.95em;color:#aaa;">Close-up view of program configuration</p>
+    </div>
+
+    <div class="step">
+      <h3>Step 4: Collect Measurements</h3>
+      <ol>
+        <li>Place purging bucket on scale and zero it</li>
+        <li>Run pellet extruder until steady state (~1 minute)</li>
+        <li>Use a timer for precise measurement</li>
+        <li>Cut the extrusion at exactly 60 seconds</li>
+        <li>Weigh the collected pellets</li>
+      </ol>
+      <img src="Cal-images/Cutting plasic flow at 60sec.jpg" alt="Cutting plastic flow">
+      <p style="font-size:0.95em;color:#aaa;">Cutting the plastic flow at 60 seconds</p>
+    </div>
+
+    <div class="step">
+      <h3>Step 5: Record and Calculate</h3>
+      <ol>
+        <li>Enter all measurements in your calibration table</li>
+        <li>Calculate throughput (e.g., g/min to kg/hr)</li>
+        <li>Plot data and fit a curve (polynomial or linear as needed)</li>
+        <li>Save your calibration data for future use</li>
+      </ol>
+    </div>
+
+    <div class="section-title">Advanced Calibration Tips</div>
+    <ul>
+      <li><strong>Project-Specific Calibration:</strong> For best results, calibrate at the maximum speed you plan to use in your current project—not just the machine's maximum. This ensures your calibration curve is most accurate for your actual print speeds.</li>
+      <li><strong>Wide Speed Range:</strong> If your print (e.g., a dome) uses both very fast and very slow speeds, perform calibration at both extremes and optionally at several points in between. This will give you a more accurate curve across your real print range.</li>
+      <li><strong>AI Nozzle Library:</strong> The calibration data you generate can be fed into the AI build nozzle library, allowing the system to optimize extrusion parameters for your specific material, nozzle, and print speeds.</li>
+    </ul>
+
+    <div class="section-title">Calibration Quiz</div>
+    <div style="text-align: center; margin-bottom: 20px;">
+      <button id="start-quiz-btn" class="submit-btn start-quiz-btn" style="font-size: 18px; padding: 12px 25px;">Take Quiz</button>
+    </div>
+    <div class="quiz-container" id="quiz" style="display: none;">
+      <div class="quiz-question">
+        <p>1. Why is it important to dry your pellets before calibration?</p>
+        <div class="quiz-options">
+          <div class="option" data-correct="true">Moisture affects pellet flow and calibration accuracy</div>
+          <div class="option" data-correct="false">It makes the pellets easier to cut</div>
+          <div class="option" data-correct="false">It prevents the scale from malfunctioning</div>
+        </div>
+      </div>
+      <div class="quiz-question">
+        <p>2. What is the purpose of running the pellet extruder until steady state before collecting a sample?</p>
+        <div class="quiz-options">
+          <div class="option" data-correct="false">To heat up the scale</div>
+          <div class="option" data-correct="true">To ensure consistent pellet flow for accurate measurement</div>
+          <div class="option" data-correct="false">To clean the nozzle</div>
+        </div>
+      </div>
+      <div class="quiz-question">
+        <p>3. How do you calculate throughput in kg/hr from a sample collected in grams over 60 seconds?</p>
+        <div class="quiz-options">
+          <div class="option" data-correct="false">Divide grams by 60, then multiply by 1000</div>
+          <div class="option" data-correct="false">Multiply grams by 1000, then divide by 60</div>
+          <div class="option" data-correct="true">Multiply grams by 60, then divide by 1000</div>
+        </div>
+      </div>
+      <div class="quiz-question">
+        <p>4. For best results, at what speed(s) should you perform calibration?</p>
+        <div class="quiz-options">
+          <div class="option" data-correct="false">Only at the machine's absolute maximum speed</div>
+          <div class="option" data-correct="true">At the maximum and minimum speeds you plan to use in your project</div>
+          <div class="option" data-correct="false">Only at the slowest speed possible</div>
+        </div>
+      </div>
+      <div class="quiz-question">
+        <p>5. Why is a polynomial curve often used for calibration instead of a straight line?</p>
+        <div class="quiz-options">
+          <div class="option" data-correct="false">Because it is easier to calculate</div>
+          <div class="option" data-correct="false">Because it uses less data</div>
+          <div class="option" data-correct="true">Because the relationship between RPM and throughput is often non-linear</div>
+        </div>
+      </div>
+      <div class="quiz-question">
+        <p>6. What can you do with your calibration data to further improve print quality and automation?</p>
+        <div class="quiz-options">
+          <div class="option" data-correct="false">Delete it after each print</div>
+          <div class="option" data-correct="true">Feed it into the AI build nozzle library for optimized extrusion</div>
+          <div class="option" data-correct="false">Only use it for manual calculations</div>
+        </div>
+      </div>
+      <button class="submit-btn" onclick="submitQuiz()">Submit Answers</button>
+      <div class="feedback" id="quiz-feedback"></div>
+    </div>
+
+    <div class="certificate" id="certificate">
+      <div class="certificate-content">
+        <div class="certificate-header">
+          <h1 class="certificate-title">Certificate of Achievement</h1>
+          <h2 class="certificate-subtitle">Pellet Extruder Calibration Training</h2>
+        </div>
+        
+        <div class="certificate-body">
+          <p class="certificate-text">This certifies that</p>
+          <div class="certificate-name" id="certificate-name">
+            <input type="text" id="user-name-input" placeholder="Enter your name" style="width: 100%; text-align: center; font-size: 24px; padding: 5px; border: none; border-bottom: 2px solid #a74e9e; background: transparent; outline: none;">
+          </div>
+          <p class="certificate-text">has successfully completed the training program for the</p>
+          <p class="certificate-text" style="font-weight: bold;">Pellet Extruder Throughput Calibration</p>
+          
+          <table class="certificate-results">
+            <tr>
+              <th style="width: 35%">Section</th>
+              <th style="width: 40%">Score</th>
+              <th style="width: 25%">Result</th>
+            </tr>
+            <tr id="quiz-result">
+              <td>Calibration Quiz</td>
+              <td>-</td>
+              <td>-</td>
+            </tr>
+          </table>
+          
+          <div class="certificate-seal">
+            CERTIFIED
+          </div>
+        </div>
+        
+        <div class="certificate-footer">
+          <p class="certificate-date" id="certificate-date"></p>
+          <p class="certificate-signature">Rapid Fusion Training Academy</p>
+        </div>
+      </div>
+      
+      <button class="print-btn" id="print-certificate">Print Certificate (PDF)</button>
+    </div>
+  </div>
+  <script>
+    // Quiz logic
+    function selectOption(option) {
+      const parent = option.parentElement;
+      parent.querySelectorAll('.option').forEach(opt => opt.classList.remove('selected'));
+      option.classList.add('selected');
+    }
+    
+    // Initialize quiz elements
+    document.addEventListener('DOMContentLoaded', function() {
+      // Hide certificate initially
+      const certificate = document.getElementById('certificate');
+      certificate.style.display = 'none';
+      
+      // Hide quiz initially and show on button click
+      const startQuizBtn = document.getElementById('start-quiz-btn');
+      const quizContainer = document.getElementById('quiz');
+      
+      startQuizBtn.addEventListener('click', function() {
+        quizContainer.style.display = 'block';
+        startQuizBtn.style.display = 'none';
+        // Scroll to quiz
+        quizContainer.scrollIntoView({ behavior: 'smooth' });
+      });
+      
+      // Setup option click handlers
+      document.querySelectorAll('.option').forEach(opt => {
+        opt.onclick = function() { selectOption(this); };
+      });
+    });
+    
+    function submitQuiz() {
+      const questions = document.querySelectorAll('.quiz-question');
+      let score = 0;
+      let allAnswered = true;
+      
+      questions.forEach(q => {
+        const selected = q.querySelector('.option.selected');
+        if (selected) {
+          if (selected.getAttribute('data-correct') === 'true') {
+            score++;
+            selected.classList.add('correct');
+          } else {
+            selected.classList.add('incorrect');
+            // highlight correct
+            const correct = q.querySelector('.option[data-correct="true"]');
+            correct.classList.add('correct');
+          }
+        } else {
+          allAnswered = false;
+        }
+      });
+      
+      if (!allAnswered) {
+        alert("Please answer all questions before submitting.");
+        return;
+      }
+      
+      // Disable further selection
+      questions.forEach(q => {
+        q.querySelectorAll('.option').forEach(opt => opt.onclick = null);
+      });
+      
+      const feedback = document.getElementById('quiz-feedback');
+      const percent = Math.round((score/questions.length)*100);
+      
+      // Update certificate results
+      const resultRow = document.getElementById('quiz-result');
+      const cells = resultRow.querySelectorAll('td');
+      cells[1].textContent = `${score}/${questions.length} (${percent}%)`;
+      cells[2].textContent = percent >= 80 ? 'PASS' : 'FAIL';
+      cells[2].className = percent >= 80 ? 'result-grade pass' : 'result-grade fail';
+      
+      if (percent >= 80) {
+        feedback.textContent = `Great job! You scored ${score}/${questions.length} (${percent}%).`;
+        feedback.className = 'feedback success';
+        // Show certificate
+        showCertificate();
+      } else {
+        feedback.textContent = `You scored ${score}/${questions.length} (${percent}%). Review the steps and try again.`;
+        feedback.className = 'feedback error';
+        // Add retake button
+        if (!document.getElementById('retake-btn')) {
+          const retake = document.createElement('button');
+          retake.textContent = 'Retake Quiz';
+          retake.className = 'retake-btn';
+          retake.id = 'retake-btn';
+          retake.onclick = function() { location.reload(); };
+          feedback.appendChild(retake);
+        }
+      }
+      feedback.style.display = 'block';
+      document.querySelector('.submit-btn').disabled = true;
+    }
+
+    function showCertificate() {
+      const certificate = document.getElementById('certificate');
+      certificate.style.display = 'block';
+      
+      // Set certificate date
+      const today = new Date();
+      const formattedDate = today.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+      document.getElementById('certificate-date').textContent = formattedDate;
+      
+      // Focus on name input
+      const nameInput = document.getElementById('user-name-input');
+      nameInput.focus();
+      
+      // Scroll to certificate
+      certificate.scrollIntoView({ behavior: 'smooth' });
+      
+      // Setup print button
+      document.getElementById('print-certificate').onclick = function() {
+        // Get the user's name
+        const nameText = nameInput.value.trim();
+        
+        if (!nameText) {
+          alert("Please enter your name before printing the certificate.");
+          nameInput.focus();
+          return;
+        }
+        
+        // Replace input with text for printing
+        const nameContainer = document.getElementById('certificate-name');
+        const originalContent = nameContainer.innerHTML;
+        nameContainer.innerHTML = '<span style="font-size: 28px; font-weight: bold; color: #a74e9e;">' + nameText + '</span>';
+        
+        // Print with timeout to ensure rendering
+        setTimeout(() => {
+          window.print();
+          
+          // Restore name input after printing
+          setTimeout(() => {
+            nameContainer.innerHTML = originalContent;
+            nameInput.focus();
+          }, 500);
+        }, 200);
+      };
+    }
+  </script>
+</body>
+</html> 
