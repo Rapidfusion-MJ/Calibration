@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Throughput Calibration – Advanced Web App</title>
+  <!-- Fonts & libs -->
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet" />
+  <script src="https://unpkg.com/mathjs@12.4.1/lib/browser/math.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@sweetalert2/theme-dark@4/dark.css">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <style>
+    :root {
+      --primary:#a74e9e;
+      --primary-dark:#933c85;
+      --bg:#2b2b2b;
+      --panel:#323232;
+      --panel-light:#464646;
+      --text:#e6e6e6;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0;font-family:'Roboto',sans-serif;background:var(--bg);color:var(--text);}
+    h1,h2,h3{margin:0 0 .5rem 0;font-weight:500;color:var(--primary)}
+    .container{max-width:1200px;margin:auto;padding:1.5rem}
+    button{background:var(--primary);border:none;color:#fff;padding:.6rem 1rem;border-radius:4px;font-size:1rem;cursor:pointer;transition:.2s}
+    button:hover{background:var(--primary-dark)}
+    table{width:100%;border-collapse:collapse}
+    thead{background:var(--panel-light)}
+    th,td{padding:.6rem;border-bottom:1px solid #4a4a4a;text-align:center}
+    input[type="number"]{width:100%;padding:.4rem;border:1px solid #4a4a4a;border-radius:4px;background:#333;color:#fff;text-align:right}
+    .flex{display:flex;gap:.75rem;align-items:center}
+    .panel{background:var(--panel);padding:1.25rem;border-radius:8px;margin-bottom:1.5rem;box-shadow:0 4px 6px rgba(0,0,0,.2)}
+    .panel-header{border-bottom:1px solid var(--primary);margin-bottom:1rem;padding-bottom:.5rem}
+    #notification{position:fixed;top:20px;right:20px;background:#4CAF50;padding:.8rem 1.2rem;border-radius:4px;transform:translateX(120%);transition:.3s;z-index:1000;color:#fff}
+    #notification.show{transform:translateX(0)}
+    #notification.error{background:#dc3545}
+    /* Chart area */
+    #chart-wrapper{height:400px;background:var(--panel);border-radius:8px;padding:1rem;margin-top:1.5rem}
+    #copy-coeff, #export-csv { display: none; }
+    /* Modal styles */
+    .saved-calibrations {
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    .saved-calibration-item {
+      background: var(--panel-light);
+      padding: 1rem;
+      margin-bottom: 0.5rem;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .saved-calibration-item:hover {
+      background: var(--primary-dark);
+    }
+    .saved-calibration-item h4 {
+      margin: 0 0 0.5rem 0;
+      color: var(--primary);
+    }
+    .saved-calibration-item p {
+      margin: 0;
+      font-size: 0.9rem;
+      color: var(--text);
+    }
+    .saved-calibration-actions {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+    }
+    .saved-calibration-actions button {
+      padding: 0.3rem 0.6rem;
+      font-size: 0.9rem;
+    }
+
+    /* Instructions styles */
+    #instructions-content {
+      max-height: none !important;
+      padding: 2rem !important;
+      font-size: 1.1rem;
+      line-height: 1.6;
+    }
+    #instructions-content h3 {
+      font-size: 1.5rem;
+      margin: 2rem 0 1rem 0;
+    }
+    #instructions-content h4 {
+      font-size: 1.3rem;
+      margin: 1.5rem 0 1rem 0;
+    }
+    #instructions-content p {
+      margin: 1rem 0;
+    }
+    #instructions-content ul, #instructions-content ol {
+      margin: 1rem 0;
+      padding-left: 2rem;
+    }
+    #instructions-content li {
+      margin: 0.5rem 0;
+    }
+    .calibration-steps {
+      margin: 2rem 0;
+    }
+    .step {
+      margin-bottom: 2rem;
+      padding: 2rem !important;
+    }
+    .step img {
+      max-width: 100%;
+      height: auto;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+    .step p {
+      font-size: 1.1rem;
+    }
+    .step ul, .step ol {
+      font-size: 1.1rem;
+      margin: 1rem 0;
+      padding-left: 2rem;
+    }
+    .step li {
+      margin: 0.5rem 0;
+    }
+    #instructions-toggle {
+      font-size: 1.2rem;
+      padding: 0.5rem;
+      cursor: pointer;
+    }
+    .panel-header {
+      padding: 1rem 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="panel">
+      <div class="panel-header"><h1>Extruder Throughput Calibration</h1></div>
+      <p>This tool helps you calibrate your extruder's throughput by analyzing the relationship between material flow rate and motor speed. Enter your measurements in g/min and RPM, then calculate the polynomial coefficients that define this relationship. The visualization will help you verify the accuracy of your calibration.</p>
+      
+      <div class="material-info" style="margin-bottom: 1rem;">
+        <div class="flex" style="gap: 1rem; margin-bottom: 0.5rem;">
+          <div style="flex: 1;">
+            <label for="material-name" style="display: block; margin-bottom: 0.25rem;">Material Name:</label>
+            <input type="text" id="material-name" style="width: 100%; padding: 0.4rem; border: 1px solid #4a4a4a; border-radius: 4px; background: #333; color: #fff;">
+          </div>
+          <div style="flex: 1;">
+            <label for="nozzle-size" style="display: block; margin-bottom: 0.25rem;">Nozzle Size (mm):</label>
+            <input type="number" id="nozzle-size" step="0.1" min="0.1" style="width: 100%; padding: 0.4rem; border: 1px solid #4a4a4a; border-radius: 4px; background: #333; color: #fff;">
+          </div>
+          <div style="flex: 1;">
+            <label for="max-rpm" style="display: block; margin-bottom: 0.25rem;">Max RPM:</label>
+            <input type="number" id="max-rpm" step="1" min="1" style="width: 100%; padding: 0.4rem; border: 1px solid #4a4a4a; border-radius: 4px; background: #333; color: #fff;">
+          </div>
+        </div>
+        <button id="auto-fill-rpm" style="margin-top: 0.5rem;">Auto-fill RPM Values</button>
+      </div>
+    </header>
+
+    <section class="panel">
+      <div class="panel-header" style="cursor: pointer;" onclick="toggleInstructions()">
+        <h2 style="display: inline-block; margin: 0;">Instructions</h2>
+        <span id="instructions-toggle" style="float: right; color: var(--primary);">▼</span>
+      </div>
+      <div id="instructions-brief" style="padding: 0.5rem 0;">
+        <p style="margin: 0;"><strong>Quick Guide:</strong> Enter material details above, use "Auto-fill RPM" to set test speeds, collect material samples for 60 seconds at each speed, enter weights in g/min, then click Calculate.</p>
+      </div>
+      <div id="instructions-content" style="display: none; max-height: 300px; overflow-y: auto; padding: 1rem 0; border-top: 1px solid var(--panel-light);">
+        <h3>Introduction</h3>
+        <p>Throughput refers to the rate at which material is deposited by your extruder, measured in kilograms per hour. Throughput calibration is required to ensure the correct amount of material is deposited - i.e the deposition bead width is accurate.</p>
+
+        <h3>Equipment Needed</h3>
+        <ul>
+          <li>Purging bucket</li>
+          <li>Weighing scales</li>
+          <li>Stopwatch</li>
+          <li>Knife / scissors</li>
+        </ul>
+
+        <h3>Calibration Steps</h3>
+        <div class="calibration-steps" style="display: flex; flex-direction: column; gap: 2rem;">
+          <div class="step" style="background: var(--panel-light); padding: 1.5rem; border-radius: 8px;">
+            <h4 style="color: var(--primary); margin-top: 0;">Step 1: Prepare Your Equipment</h4>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; align-items: center;">
+              <div>
+                <p>Before starting the calibration process, ensure you have:</p>
+                <ul>
+                  <li>Purging bucket</li>
+                  <li>Weighing scales</li>
+                  <li>Stopwatch</li>
+                  <li>Knife / scissors</li>
+                </ul>
+                <p><strong>Important:</strong> Make sure your material is properly dried according to supplier guidelines (moisture content <0.2% by mass).</p>
+              </div>
+              <div>
+                <img src="Cal-images/plasic on scales .jpg" alt="Equipment setup" style="width: 100%; border-radius: 8px;">
+                <p style="text-align: center; margin-top: 0.5rem; font-size: 0.9rem;">Equipment setup with scales ready for measurement</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="step" style="background: var(--panel-light); padding: 1.5rem; border-radius: 8px;">
+            <h4 style="color: var(--primary); margin-top: 0;">Step 2: Start Calibration Program</h4>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; align-items: center;">
+              <div>
+                <p>Load your material and start the calibration program on the robot. The program will help you test different speeds:</p>
+                <ul>
+                  <li>20% of max speed</li>
+                  <li>40% of max speed</li>
+                  <li>60% of max speed</li>
+                  <li>80% of max speed</li>
+                  <li>100% of max speed (if extruder can handle it)</li>
+                </ul>
+              </div>
+              <div>
+                <img src="Cal-images/starting calibartion prog.jpg" alt="Starting calibration program" style="width: 100%; border-radius: 8px;">
+                <p style="text-align: center; margin-top: 0.5rem; font-size: 0.9rem;">Starting the calibration program on the robot</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="step" style="background: var(--panel-light); padding: 1.5rem; border-radius: 8px;">
+            <h4 style="color: var(--primary); margin-top: 0;">Step 3: Program Setup</h4>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; align-items: center;">
+              <div>
+                <p>Verify the program settings and ensure everything is properly configured:</p>
+                <ul>
+                  <li>Check material loading</li>
+                  <li>Verify temperature settings</li>
+                  <li>Confirm speed parameters</li>
+                  <li>Ensure proper purge bucket placement</li>
+                </ul>
+              </div>
+              <div>
+                <img src="Cal-images/close up of programe start on the robot .jpg" alt="Program setup" style="width: 100%; border-radius: 8px;">
+                <p style="text-align: center; margin-top: 0.5rem; font-size: 0.9rem;">Close-up view of program configuration</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="step" style="background: var(--panel-light); padding: 1.5rem; border-radius: 8px;">
+            <h4 style="color: var(--primary); margin-top: 0;">Step 4: Collect Measurements</h4>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; align-items: center;">
+              <div>
+                <p>For each speed setting:</p>
+                <ol style="font-size: 1.1rem;">
+                  <li>Place purging bucket on scale and zero it</li>
+                  <li>Run extruder until steady state (~1 minute)</li>
+                  <li>Use a timer for precise measurement</li>
+                  <li>Cut the extrusion at exactly 60 seconds</li>
+                  <li>Weigh the collected material</li>
+                </ol>
+              </div>
+              <div style="text-align: center;">
+                <img src="Cal-images/Cutting plasic flow at 60sec.jpg" alt="Cutting plastic flow" style="width: 100%; max-width: 350px; border-radius: 8px;">
+                <p style="text-align: center; margin-top: 0.5rem; font-size: 0.95rem;">Cutting the plastic flow at 60 seconds</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="step" style="background: var(--panel-light); padding: 1.5rem; border-radius: 8px;">
+            <h4 style="color: var(--primary); margin-top: 0;">Step 5: Record and Calculate</h4>
+            <div>
+              <p>After collecting all measurements:</p>
+              <ol>
+                <li>Enter all measurements in the table below</li>
+                <li>Click "Calculate Coefficients" to generate the calibration curve</li>
+                <li>Verify the calibration by printing a test line</li>
+                <li>Save your calibration data for future use</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+
+        <p style="margin-top: 1.5rem;"><strong>Important:</strong> Material throughput can vary significantly based on moisture content. Always ensure proper material drying before calibration.</p>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Calibration Data</h2>
+        <div style="float: right; margin-top: -2.5rem;">
+          <button id="save-data" style="margin-right: 0.5rem;">Save Data</button>
+          <button id="load-data" style="margin-right: 0.5rem;">Load Data</button>
+          <button id="calc-btn">Calculate Coefficients</button>
+        </div>
+      </div>
+      <div style="margin-bottom: 1rem;">
+        <button id="add-row">Add Row</button>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Throughput (g/min)</th>
+            <th>Throughput (kg/hr)</th>
+            <th>Motor Speed (rpm)</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="data-body"></tbody>
+      </table>
+    </section>
+
+    <section id="results" class="panel" hidden>
+      <div class="panel-header">
+        <h2>Calibration Coefficients</h2>
+        <div style="float: right; margin-top: -2.5rem;">
+          <button id="export-csv">Export CSV</button>
+        </div>
+      </div>
+      <table>
+        <thead><tr><th>X³ (a)</th><th>X² (b)</th><th>X¹ (c)</th><th>Y (d)</th></tr></thead>
+        <tbody><tr><td id="coef3"></td><td id="coef2"></td><td id="coef1"></td><td id="coef0"></td></tr></tbody>
+      </table>
+    </section>
+
+    <section id="chart-wrapper" hidden>
+      <canvas id="chart"></canvas>
+    </section>
+  </div>
+
+  <div id="notification"></div>
+
+  <script>
+    /* --- helpers --- */
+    const qs=id=>document.getElementById(id);
+    const notify=(msg,err=false)=>{const n=qs('notification');n.textContent=msg;n.className='';n.classList.add('show');if(err)n.classList.add('error');setTimeout(()=>n.classList.remove('show'),3000)};
+
+    /* --- instructions toggle --- */
+    function toggleInstructions() {
+      const content = qs('instructions-content');
+      const toggle = qs('instructions-toggle');
+      if (content.style.display === 'none') {
+        content.style.display = 'block';
+        toggle.textContent = '▲';
+      } else {
+        content.style.display = 'none';
+        toggle.textContent = '▼';
+      }
+    }
+
+    /* --- DOM --- */
+    const body=qs('data-body');
+
+    /* --- add / remove rows --- */
+    let rowIdx=0;
+    function addRow(gmin='',rpm=''){
+      const tr=document.createElement('tr');tr.dataset.row=rowIdx;
+      tr.innerHTML=`<td>${rowIdx+1}</td>
+        <td><input type="number" step="0.01" min="0" class="gmin" value="${gmin}"></td>
+        <td class="kghr">—</td>
+        <td><input type="number" step="0.1" min="0" class="rpm" value="${rpm}"></td>
+        <td><button class="del-row">✕</button></td>`;
+      tr.querySelector('.gmin').addEventListener('input',e=>updateKgHr(e.target));
+      tr.querySelector('.del-row').addEventListener('click',()=>{tr.remove();updateIdx()});
+      body.appendChild(tr);rowIdx++;updateIdx();if(gmin)updateKgHr(tr.querySelector('.gmin'));
+    }
+    function updateIdx(){[...body.children].forEach((r,i)=>r.children[0].textContent=i+1)}
+    function updateKgHr(inp){const g=parseFloat(inp.value);const cell=inp.parentElement.parentElement.querySelector('.kghr');cell.textContent=isNaN(g)?'—':((g*60)/1000).toFixed(4)}
+
+    qs('add-row').onclick=()=>addRow();
+
+    /* --- calculation --- */
+    let chart;
+    qs('calc-btn').onclick=()=>{
+      const xs=[],ys=[];
+      [...body.querySelectorAll('tr')].forEach(r=>{
+        const g=parseFloat(r.querySelector('.gmin').value);
+        const rpm=parseFloat(r.querySelector('.rpm').value);
+        if(!isNaN(g)&&!isNaN(rpm)){xs.push((g*60)/1000);ys.push(rpm);r.querySelector('.kghr').textContent=((g*60)/1000).toFixed(4);} });
+      if(xs.length<4){notify('Need at least 4 valid rows',true);return;}
+      // design matrix
+      const X=xs.map(x=>[Math.pow(x,3),Math.pow(x,2),x,1]);
+      const beta=math.multiply(math.inv(math.multiply(math.transpose(X),X)),math.multiply(math.transpose(X),ys));
+      ['coef3','coef2','coef1','coef0'].forEach((id,i)=>qs(id).textContent=beta[i].toPrecision(10));
+      qs('results').hidden=false;
+      qs('export-csv').style.display='inline-block';
+      drawChart(xs,ys,beta);
+      notify('Coefficients calculated');
+    };
+
+    /* --- chart --- */
+    function drawChart(xs,ys,beta){
+      const min=Math.min(...xs),max=Math.max(...xs),pts=100,step=(max-min)/pts;
+      const curveX=[],curveY=[];
+      for(let i=0;i<=pts;i++){const x=min+i*step;curveX.push(x);curveY.push(beta[0]*Math.pow(x,3)+beta[1]*Math.pow(x,2)+beta[2]*x+beta[3]);}
+      if(chart)chart.destroy();chart=new Chart(qs('chart'),{
+        type:'scatter',data:{datasets:[{label:'Measured',data:xs.map((x,i)=>({x:xs[i],y:ys[i]})),pointRadius:6,backgroundColor:varComputed('--primary')},{label:'Fit',data:curveX.map((x,i)=>({x, y:curveY[i]})),type:'line',borderWidth:2,pointRadius:0,borderColor:'#4CAF50'}]},options:{responsive:true,maintainAspectRatio:false,scales:{x:{title:{display:true,text:'Throughput (kg/hr)',color:'#e6e6e6'},ticks:{color:'#e6e6e6'},grid:{color:'rgba(255,255,255,.1)'}},y:{title:{display:true,text:'Motor Speed (rpm)',color:'#e6e6e6'},ticks:{color:'#e6e6e6'},grid:{color:'rgba(255,255,255,.1)'}}},plugins:{legend:{labels:{color:'#e6e6e6'}}}}});
+      qs('chart-wrapper').hidden=false;qs('chart-wrapper').scrollIntoView({behavior:'smooth'});
+    }
+    function varComputed(name){return getComputedStyle(document.documentElement).getPropertyValue(name)}
+
+    /* --- export --- */
+    qs('export-csv').onclick=()=>{
+      const materialName = qs('material-name').value || 'Unknown';
+      const nozzleSize = qs('nozzle-size').value || 'Unknown';
+      let csv = `Material: ${materialName}\nNozzle Size: ${nozzleSize} mm\n\n`;
+      csv += 'g/min,kg/hr,rpm\n';
+      [...body.querySelectorAll('tr')].forEach(r=>{
+        const g=r.querySelector('.gmin').value;
+        const kg=r.querySelector('.kghr').textContent;
+        const rpm=r.querySelector('.rpm').value;
+        if(g&&rpm)csv+=`${g},${kg},${rpm}\n`;
+      });
+      csv+='\nCoefficients\nX3,X2,X1,Y\n'+[qs('coef3').textContent,qs('coef2').textContent,qs('coef1').textContent,qs('coef0').textContent].join(',');
+      const a=document.createElement('a');
+      a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+      a.download='throughput_calibration.csv';
+      a.click();
+      notify('CSV exported');
+    };
+
+    /* --- auto-fill RPM --- */
+    qs('auto-fill-rpm').onclick=()=>{
+      const maxRpm = parseFloat(qs('max-rpm').value);
+      if (isNaN(maxRpm) || maxRpm <= 0) {
+        notify('Please enter a valid max RPM value', true);
+        return;
+      }
+      
+      // Clear existing rows
+      body.innerHTML = '';
+      rowIdx = 0;
+      
+      // Add 5 rows with calculated RPM values
+      const percentages = [0.2, 0.4, 0.6, 0.8, 1.0];
+      percentages.forEach(percentage => {
+        const rpm = Math.round(maxRpm * percentage);
+        addRow('', rpm.toString());
+      });
+      
+      notify('RPM values auto-filled based on max RPM');
+    };
+
+    /* --- save/load functionality --- */
+    function showSavedCalibrations() {
+      const savedData = localStorage.getItem('throughputCalibrations');
+      let calibrations = [];
+      
+      if (savedData) {
+        try {
+          calibrations = JSON.parse(savedData);
+        } catch (error) {
+          console.error('Error parsing saved data:', error);
+        }
+      }
+
+      const content = document.createElement('div');
+      content.className = 'saved-calibrations';
+      
+      if (calibrations.length === 0) {
+        content.innerHTML = '<p>No saved calibrations found.</p>';
+      } else {
+        calibrations.forEach((cal, index) => {
+          const item = document.createElement('div');
+          item.className = 'saved-calibration-item';
+          item.innerHTML = `
+            <h4>${cal.materialName || 'Unnamed Material'}</h4>
+            <p>Nozzle: ${cal.nozzleSize}mm | Max RPM: ${cal.maxRpm}</p>
+            <p>Measurements: ${cal.rows.length}</p>
+            <div class="saved-calibration-actions">
+              <button onclick="loadCalibration(${index})">Load</button>
+              <button onclick="deleteCalibration(${index})" style="background: #dc3545;">Delete</button>
+            </div>
+          `;
+          content.appendChild(item);
+        });
+      }
+
+      Swal.fire({
+        title: 'Saved Calibrations',
+        html: content,
+        width: '600px',
+        showConfirmButton: false,
+        showCloseButton: true,
+        background: 'var(--panel)',
+        customClass: {
+          popup: 'dark-theme'
+        }
+      });
+    }
+
+    function loadCalibration(index) {
+      const savedData = localStorage.getItem('throughputCalibrations');
+      if (!savedData) return;
+
+      try {
+        const calibrations = JSON.parse(savedData);
+        if (calibrations[index]) {
+          loadCalibrationData(calibrations[index]);
+          Swal.close();
+        }
+      } catch (error) {
+        notify('Error loading calibration', true);
+        console.error('Error loading data:', error);
+      }
+    }
+
+    function deleteCalibration(index) {
+      Swal.fire({
+        title: 'Delete Calibration?',
+        text: 'This action cannot be undone.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Delete',
+        cancelButtonText: 'Cancel',
+        background: 'var(--panel)',
+        customClass: {
+          popup: 'dark-theme'
+        }
+      }).then((result) => {
+        if (result.isConfirmed) {
+          const savedData = localStorage.getItem('throughputCalibrations');
+          if (savedData) {
+            try {
+              const calibrations = JSON.parse(savedData);
+              calibrations.splice(index, 1);
+              localStorage.setItem('throughputCalibrations', JSON.stringify(calibrations));
+              showSavedCalibrations();
+              notify('Calibration deleted');
+            } catch (error) {
+              console.error('Error deleting calibration:', error);
+              notify('Error deleting calibration', true);
+            }
+          }
+        }
+      });
+    }
+
+    function loadCalibrationData(data) {
+      // Clear existing data
+      body.innerHTML = '';
+      rowIdx = 0;
+      
+      // Restore form fields
+      qs('material-name').value = data.materialName || '';
+      qs('nozzle-size').value = data.nozzleSize || '';
+      qs('max-rpm').value = data.maxRpm || '';
+      
+      // Restore rows
+      if (data.rows && data.rows.length > 0) {
+        data.rows.forEach(row => addRow(row.g, row.rpm));
+      } else {
+        addRow();
+      }
+      
+      notify('Calibration loaded successfully');
+    }
+
+    qs('save-data').onclick=()=>{
+      const data = {
+        materialName: qs('material-name').value,
+        nozzleSize: qs('nozzle-size').value,
+        maxRpm: qs('max-rpm').value,
+        rows: []
+      };
+      
+      [...body.querySelectorAll('tr')].forEach(r => {
+        const g = r.querySelector('.gmin').value;
+        const rpm = r.querySelector('.rpm').value;
+        if (g || rpm) {
+          data.rows.push({
+            g: g,
+            rpm: rpm
+          });
+        }
+      });
+
+      // Get existing calibrations
+      let calibrations = [];
+      const savedData = localStorage.getItem('throughputCalibrations');
+      if (savedData) {
+        try {
+          calibrations = JSON.parse(savedData);
+        } catch (error) {
+          console.error('Error parsing saved data:', error);
+        }
+      }
+
+      // Add new calibration
+      calibrations.push(data);
+      
+      // Save updated calibrations
+      localStorage.setItem('throughputCalibrations', JSON.stringify(calibrations));
+      notify('Data saved successfully');
+    };
+
+    qs('load-data').onclick=()=>{
+      showSavedCalibrations();
+    };
+
+    // pre‑populate three blank rows
+    for(let i=0;i<3;i++)addRow();
+  </script>
+</body>
+</html>
