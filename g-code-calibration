@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PE320 Extruder Calibration Tool</title>
+  <!-- Fonts & libs -->
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.11.0/math.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@sweetalert2/theme-dark@4/dark.css">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <style>
+    :root {
+      --primary:#a74e9e;
+      --primary-dark:#933c85;
+      --bg:#2b2b2b;
+      --panel:#323232;
+      --panel-light:#464646;
+      --text:#e6e6e6;
+      --success:#4CAF50;
+      --warning:#ff9800;
+      --danger:#dc3545;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0;font-family:'Roboto',sans-serif;background:var(--bg);color:var(--text);}
+    h1,h2,h3{margin:0 0 .5rem 0;font-weight:500;color:var(--primary)}
+    .container{max-width:1200px;margin:auto;padding:1.5rem}
+    button{background:var(--primary);border:none;color:#fff;padding:.6rem 1rem;border-radius:4px;font-size:1rem;cursor:pointer;transition:.2s}
+    button:hover{background:var(--primary-dark)}
+    button.success{background:var(--success)}
+    button.success:hover{background:#45a049}
+    button.danger{background:var(--danger)}
+    button.danger:hover{background:#c82333}
+    table{width:100%;border-collapse:collapse}
+    thead{background:var(--panel-light)}
+    th,td{padding:.6rem;border-bottom:1px solid #4a4a4a;text-align:center}
+    input[type="number"], input[type="text"]{width:100%;padding:.4rem;border:1px solid #4a4a4a;border-radius:4px;background:#333;color:#fff;text-align:right}
+    input[type="text"]{text-align:left}
+    .flex{display:flex;gap:.75rem;align-items:center}
+    .panel{background:var(--panel);padding:1.25rem;border-radius:8px;margin-bottom:1.5rem;box-shadow:0 4px 6px rgba(0,0,0,.2)}
+    .panel-header{border-bottom:1px solid var(--primary);margin-bottom:1rem;padding-bottom:.5rem}
+    #notification{position:fixed;top:20px;right:20px;background:#4CAF50;padding:.8rem 1.2rem;border-radius:4px;transform:translateX(120%);transition:.3s;z-index:1000;color:#fff}
+    #notification.show{transform:translateX(0)}
+    #notification.error{background:#dc3545}
+    /* Chart area */
+    #chart-wrapper{height:400px;background:var(--panel);border-radius:8px;padding:1rem;margin-top:1.5rem}
+    #copy-coeff, #export-csv { display: none; }
+    /* Modal styles */
+    .saved-calibrations {
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    .saved-calibration-item {
+      background: var(--panel-light);
+      padding: 1rem;
+      margin-bottom: 0.5rem;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .saved-calibration-item:hover {
+      background: var(--primary-dark);
+    }
+    .saved-calibration-item h4 {
+      margin: 0 0 0.5rem 0;
+      color: var(--primary);
+    }
+    .saved-calibration-item p {
+      margin: 0;
+      font-size: 0.9rem;
+      color: var(--text);
+    }
+    .saved-calibration-actions {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+    }
+    .saved-calibration-actions button {
+      padding: 0.3rem 0.6rem;
+      font-size: 0.9rem;
+    }
+    /* G-code section */
+    .gcode-section {
+      background: var(--panel-light);
+      padding: 1rem;
+      border-radius: 4px;
+      margin-top: 1rem;
+    }
+    .gcode-output {
+      font-family: monospace;
+      background: #1a1a1a;
+      padding: 1rem;
+      border-radius: 4px;
+      margin-top: 0.5rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: #4CAF50;
+    }
+    .info-box {
+      background: rgba(167, 78, 158, 0.1);
+      border: 1px solid var(--primary);
+      padding: 1rem;
+      border-radius: 4px;
+      margin-bottom: 1rem;
+    }
+    .warning-box {
+      background: rgba(255, 152, 0, 0.1);
+      border: 1px solid var(--warning);
+      padding: 1rem;
+      border-radius: 4px;
+      margin-bottom: 1rem;
+      color: var(--warning);
+    }
+    .spec-table {
+      margin: 1rem 0;
+      font-size: 0.95rem;
+    }
+    .spec-table td:first-child {
+      font-weight: 500;
+      color: var(--primary);
+      text-align: left;
+    }
+    /* Instructions styles */
+    #instructions-content {
+      max-height: none !important;
+      padding: 2rem !important;
+      font-size: 1.1rem;
+      line-height: 1.6;
+    }
+    #instructions-toggle {
+      font-size: 1.2rem;
+      padding: 0.5rem;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="panel">
+      <div class="panel-header"><h1>PE320 Extruder Calibration Tool</h1></div>
+      <div class="info-box">
+        <h3 style="margin-top: 0;">PE320 Specifications</h3>
+        <table class="spec-table">
+          <tr><td>Motor Max Speed:</td><td>3990 RPM</td></tr>
+          <tr><td>Gearbox Reduction:</td><td>25:1</td></tr>
+          <tr><td>Mixing Screw Max Speed:</td><td>159.6 RPM</td></tr>
+          <tr><td>Max Feed Rate (F):</td><td>8818.21 mm/min (146.97 mm/s)</td></tr>
+        </table>
+      </div>
+      <p>This tool calibrates the relationship between <strong>mixing screw speed (RPM)</strong> and material throughput (kg/hr) for the PE320 extruder. Enter your measurements, calculate polynomial coefficients, and generate G-code commands for calibration tests.</p>
+      
+      <div class="material-info" style="margin-bottom: 1rem;">
+        <div class="flex" style="gap: 1rem; margin-bottom: 0.5rem;">
+          <div style="flex: 1;">
+            <label for="material-name" style="display: block; margin-bottom: 0.25rem;">Material Name:</label>
+            <input type="text" id="material-name" placeholder="e.g., PLA, ABS, PETG">
+          </div>
+          <div style="flex: 1;">
+            <label for="nozzle-size" style="display: block; margin-bottom: 0.25rem;">Nozzle Size (mm):</label>
+            <input type="number" id="nozzle-size" step="0.1" min="0.1" placeholder="e.g., 1.0">
+          </div>
+        </div>
+        <button id="auto-fill-speed" style="margin-top: 0.5rem;">Auto-fill Test Speeds (20-100%)</button>
+      </div>
+    </header>
+
+    <section class="panel">
+      <div class="panel-header" style="cursor: pointer;" onclick="toggleInstructions()">
+        <h2 style="display: inline-block; margin: 0;">Instructions</h2>
+        <span id="instructions-toggle" style="float: right; color: var(--primary);">▼</span>
+      </div>
+      <div id="instructions-brief" style="padding: 0.5rem 0;">
+        <p style="margin: 0;"><strong>Quick Guide:</strong> Enter material details, use "Auto-fill Test Speeds" to set mixing screw speeds, collect material samples for 60 seconds at each speed, enter weights in g/min, then click Calculate.</p>
+      </div>
+      <div id="instructions-content" style="display: none; padding: 1rem 0; border-top: 1px solid var(--panel-light);">
+        <h3>PE320 Calibration Process</h3>
+        <p>This tool is specifically designed for the PE320 extruder. The calibration process establishes the relationship between mixing screw speed (RPM) and material throughput (kg/hr).</p>
+
+        <div class="warning-box">
+          <strong>Important:</strong> This tool uses <strong>mixing screw speed</strong> (after 25:1 gearbox reduction), not motor speed. Maximum mixing screw speed is 159.6 RPM.
+        </div>
+
+        <h3>Equipment Needed</h3>
+        <ul>
+          <li>Purging bucket</li>
+          <li>Precision weighing scale (±0.01g accuracy)</li>
+          <li>Stopwatch/timer</li>
+          <li>Knife or scissors for cutting extrusion</li>
+          <li>Properly dried material (moisture content <0.2%)</li>
+        </ul>
+
+        <h3>Calibration Steps</h3>
+        <ol>
+          <li><strong>Material Preparation:</strong> Ensure material is properly dried according to manufacturer specifications.</li>
+          <li><strong>Set Test Speeds:</strong> Click "Auto-fill Test Speeds" to populate the table with recommended mixing screw speeds (20%, 40%, 60%, 80%, 100% of 159.6 RPM).</li>
+          <li><strong>Generate G-code:</strong> Use the G-code generator below to create test commands for each speed.</li>
+          <li><strong>Run Tests:</strong> For each speed:
+            <ul>
+              <li>Place purging bucket on scale and zero it</li>
+              <li>Run the generated G-code command</li>
+              <li>Allow extruder to reach steady state (~1 minute)</li>
+              <li>Start timer and collect material for exactly 60 seconds</li>
+              <li>Cut extrusion precisely at 60 seconds</li>
+              <li>Weigh collected material in grams</li>
+            </ul>
+          </li>
+          <li><strong>Enter Data:</strong> Input the weight (g/min) for each test speed in the table.</li>
+          <li><strong>Calculate:</strong> Click "Calculate Coefficients" to generate the calibration curve.</li>
+          <li><strong>Save Results:</strong> Save your calibration data for future use.</li>
+        </ol>
+
+        <h3>G-code Formula</h3>
+        <p>For any mixing screw speed <code>x</code> (in RPM), the G-code command for 60-second extrusion is:</p>
+        <div class="gcode-output">G1 E[(x / 159.6) * 8818.21] F[(x / 159.6) * 8818.21]</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h2>G-code Generator</h2>
+      </div>
+      <div class="flex" style="gap: 1rem; margin-bottom: 1rem;">
+        <div style="flex: 1;">
+          <label for="gcode-speed" style="display: block; margin-bottom: 0.25rem;">Mixing Screw Speed (RPM):</label>
+          <input type="number" id="gcode-speed" step="0.1" min="0" max="159.6" placeholder="0-159.6">
+        </div>
+        <div style="flex: 1;">
+          <label for="gcode-duration" style="display: block; margin-bottom: 0.25rem;">Duration (seconds):</label>
+          <input type="number" id="gcode-duration" step="1" min="1" value="60">
+        </div>
+        <div style="align-self: flex-end;">
+          <button id="generate-gcode" class="success">Generate G-code</button>
+        </div>
+      </div>
+      <div id="gcode-result" class="gcode-section" style="display: none;">
+        <h4 style="margin-top: 0;">Generated G-code:</h4>
+        <div id="gcode-display" class="gcode-output"></div>
+        <button id="copy-gcode" style="margin-top: 0.5rem;">Copy to Clipboard</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Calibration Data</h2>
+        <div style="float: right; margin-top: -2.5rem;">
+          <button id="save-data" style="margin-right: 0.5rem;">Save Data</button>
+          <button id="load-data" style="margin-right: 0.5rem;">Load Data</button>
+          <button id="calc-btn">Calculate Coefficients</button>
+        </div>
+      </div>
+      <div style="margin-bottom: 1rem;">
+        <button id="add-row">Add Row</button>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Throughput (g/min)</th>
+            <th>Throughput (kg/hr)</th>
+            <th>Mixing Screw Speed (rpm)</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="data-body"></tbody>
+      </table>
+    </section>
+
+    <section id="results" class="panel" hidden>
+      <div class="panel-header">
+        <h2>Calibration Coefficients</h2>
+        <div style="float: right; margin-top: -2.5rem;">
+          <button id="export-csv">Export CSV</button>
+        </div>
+      </div>
+      <p style="margin-bottom: 1rem;">Polynomial equation: Throughput (kg/hr) = aX³ + bX² + cX + d, where X is mixing screw speed (RPM)</p>
+      <table>
+        <thead><tr><th>X³ (a)</th><th>X² (b)</th><th>X¹ (c)</th><th>Y (d)</th></tr></thead>
+        <tbody><tr><td id="coef3"></td><td id="coef2"></td><td id="coef1"></td><td id="coef0"></td></tr></tbody>
+      </table>
+    </section>
+
+    <section id="chart-wrapper" hidden>
+      <canvas id="chart"></canvas>
+    </section>
+  </div>
+
+  <div id="notification"></div>
+
+  <script>
+    // Wait for DOM to be ready
+    document.addEventListener('DOMContentLoaded', function() {
+    /* --- constants --- */
+    const MAX_SCREW_SPEED = 159.6;
+    const MAX_FEED_RATE = 8818.21;
+
+    /* --- helpers --- */
+    const qs=id=>document.getElementById(id);
+    const notify=(msg,err=false)=>{const n=qs('notification');n.textContent=msg;n.className='';n.classList.add('show');if(err)n.classList.add('error');setTimeout(()=>n.classList.remove('show'),3000)};
+
+    /* --- instructions toggle --- */
+    function toggleInstructions() {
+      const content = qs('instructions-content');
+      const toggle = qs('instructions-toggle');
+      if (content.style.display === 'none') {
+        content.style.display = 'block';
+        toggle.textContent = '▲';
+      } else {
+        content.style.display = 'none';
+        toggle.textContent = '▼';
+      }
+    }
+
+    /* --- G-code generator --- */
+    qs('generate-gcode').onclick=()=>{
+      const speed = parseFloat(qs('gcode-speed').value);
+      const duration = parseFloat(qs('gcode-duration').value);
+      
+      if (isNaN(speed) || speed < 0 || speed > MAX_SCREW_SPEED) {
+        notify(`Please enter a valid mixing screw speed (0-${MAX_SCREW_SPEED} RPM)`, true);
+        return;
+      }
+      
+      if (isNaN(duration) || duration <= 0) {
+        notify('Please enter a valid duration (seconds)', true);
+        return;
+      }
+      
+      const ratio = speed / MAX_SCREW_SPEED;
+      const e_value = (ratio * MAX_FEED_RATE * duration / 60).toFixed(2);
+      const f_value = (ratio * MAX_FEED_RATE).toFixed(2);
+      
+      const gcode = `G1 E${e_value} F${f_value}`;
+      
+      qs('gcode-display').textContent = gcode;
+      qs('gcode-result').style.display = 'block';
+      
+      // Auto-scroll to result
+      qs('gcode-result').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    };
+
+    qs('copy-gcode').onclick=()=>{
+      const gcode = qs('gcode-display').textContent;
+      navigator.clipboard.writeText(gcode).then(()=>{
+        notify('G-code copied to clipboard');
+      }).catch(()=>{
+        notify('Failed to copy G-code', true);
+      });
+    };
+
+    /* --- DOM --- */
+    const body=qs('data-body');
+
+    /* --- add / remove rows --- */
+    let rowIdx=0;
+    function addRow(gmin='',rpm=''){
+      const tr=document.createElement('tr');tr.dataset.row=rowIdx;
+      tr.innerHTML=`<td>${rowIdx+1}</td>
+        <td><input type="number" step="0.01" min="0" class="gmin" value="${gmin}"></td>
+        <td class="kghr">—</td>
+        <td><input type="number" step="0.1" min="0" max="${MAX_SCREW_SPEED}" class="rpm" value="${rpm}"></td>
+        <td><button class="del-row danger">✕</button></td>`;
+      tr.querySelector('.gmin').addEventListener('input',e=>updateKgHr(e.target));
+      tr.querySelector('.del-row').addEventListener('click',()=>{tr.remove();updateIdx()});
+      body.appendChild(tr);rowIdx++;updateIdx();if(gmin)updateKgHr(tr.querySelector('.gmin'));
+    }
+    function updateIdx(){[...body.children].forEach((r,i)=>r.children[0].textContent=i+1)}
+    function updateKgHr(inp){const g=parseFloat(inp.value);const cell=inp.parentElement.parentElement.querySelector('.kghr');cell.textContent=isNaN(g)?'—':((g*60)/1000).toFixed(4)}
+
+    qs('add-row').onclick=()=>addRow();
+
+    /* --- calculation --- */
+    let chart;
+    qs('calc-btn').onclick=()=>{
+      // Check if math.js is loaded
+      if (typeof math === 'undefined') {
+        notify('Math library not loaded. Please refresh the page.', true);
+        return;
+      }
+      const xs=[],ys=[];
+      [...body.querySelectorAll('tr')].forEach(r=>{
+        const g=parseFloat(r.querySelector('.gmin').value);
+        const rpm=parseFloat(r.querySelector('.rpm').value);
+        if(!isNaN(g)&&!isNaN(rpm)){xs.push((g*60)/1000);ys.push(rpm);r.querySelector('.kghr').textContent=((g*60)/1000).toFixed(4);} });
+      if(xs.length<4){notify('Need at least 4 valid rows',true);return;}
+      // design matrix
+      const X=xs.map(x=>[Math.pow(x,3),Math.pow(x,2),x,1]);
+      const beta=math.multiply(math.inv(math.multiply(math.transpose(X),X)),math.multiply(math.transpose(X),ys));
+      ['coef3','coef2','coef1','coef0'].forEach((id,i)=>qs(id).textContent=beta[i].toPrecision(10));
+      qs('results').hidden=false;
+      qs('export-csv').style.display='inline-block';
+      drawChart(xs,ys,beta);
+      notify('Coefficients calculated');
+    };
+
+    /* --- chart --- */
+    function drawChart(xs,ys,beta){
+      const min=Math.min(...xs),max=Math.max(...xs),pts=100,step=(max-min)/pts;
+      const curveX=[],curveY=[];
+      for(let i=0;i<=pts;i++){const x=min+i*step;curveX.push(x);curveY.push(beta[0]*Math.pow(x,3)+beta[1]*Math.pow(x,2)+beta[2]*x+beta[3]);}
+      if(chart)chart.destroy();chart=new Chart(qs('chart'),{
+        type:'scatter',data:{datasets:[{label:'Measured',data:xs.map((x,i)=>({x:xs[i],y:ys[i]})),pointRadius:6,backgroundColor:varComputed('--primary')},{label:'Fit',data:curveX.map((x,i)=>({x, y:curveY[i]})),type:'line',borderWidth:2,pointRadius:0,borderColor:'#4CAF50'}]},options:{responsive:true,maintainAspectRatio:false,scales:{x:{title:{display:true,text:'Throughput (kg/hr)',color:'#e6e6e6'},ticks:{color:'#e6e6e6'},grid:{color:'rgba(255,255,255,.1)'}},y:{title:{display:true,text:'Mixing Screw Speed (rpm)',color:'#e6e6e6'},ticks:{color:'#e6e6e6'},grid:{color:'rgba(255,255,255,.1)'}}},plugins:{legend:{labels:{color:'#e6e6e6'}}}}});
+      qs('chart-wrapper').hidden=false;qs('chart-wrapper').scrollIntoView({behavior:'smooth'});
+    }
+    function varComputed(name){return getComputedStyle(document.documentElement).getPropertyValue(name)}
+
+    /* --- export --- */
+    qs('export-csv').onclick=()=>{
+      const materialName = qs('material-name').value || 'Unknown';
+      const nozzleSize = qs('nozzle-size').value || 'Unknown';
+      let csv = `PE320 Extruder Calibration\n`;
+      csv += `Material: ${materialName}\nNozzle Size: ${nozzleSize} mm\n`;
+      csv += `Max Mixing Screw Speed: ${MAX_SCREW_SPEED} RPM\n\n`;
+      csv += 'g/min,kg/hr,Mixing Screw Speed (rpm)\n';
+      [...body.querySelectorAll('tr')].forEach(r=>{
+        const g=r.querySelector('.gmin').value;
+        const kg=r.querySelector('.kghr').textContent;
+        const rpm=r.querySelector('.rpm').value;
+        if(g&&rpm)csv+=`${g},${kg},${rpm}\n`;
+      });
+      csv+='\nCoefficients (Throughput = aX³ + bX² + cX + d)\nX³,X²,X¹,Y\n'+[qs('coef3').textContent,qs('coef2').textContent,qs('coef1').textContent,qs('coef0').textContent].join(',');
+      const a=document.createElement('a');
+      a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+      a.download=`PE320_calibration_${materialName}_${nozzleSize}mm.csv`;
+      a.click();
+      notify('CSV exported');
+    };
+
+    /* --- auto-fill speeds --- */
+    qs('auto-fill-speed').onclick=()=>{
+      // Clear existing rows
+      body.innerHTML = '';
+      rowIdx = 0;
+      
+      // Add 5 rows with calculated mixing screw speeds
+      const percentages = [0.2, 0.4, 0.6, 0.8, 1.0];
+      percentages.forEach(percentage => {
+        const rpm = (MAX_SCREW_SPEED * percentage).toFixed(1);
+        addRow('', rpm);
+      });
+      
+      notify('Test speeds auto-filled (20%, 40%, 60%, 80%, 100% of max)');
+    };
+
+    /* --- save/load functionality --- */
+    function showSavedCalibrations() {
+      const savedData = localStorage.getItem('pe320Calibrations');
+      let calibrations = [];
+      
+      if (savedData) {
+        try {
+          calibrations = JSON.parse(savedData);
+        } catch (error) {
+          console.error('Error parsing saved data:', error);
+        }
+      }
+
+      const content = document.createElement('div');
+      content.className = 'saved-calibrations';
+      
+      if (calibrations.length === 0) {
+        content.innerHTML = '<p>No saved calibrations found.</p>';
+      } else {
+        calibrations.forEach((cal, index) => {
+          const item = document.createElement('div');
+          item.className = 'saved-calibration-item';
+          item.innerHTML = `
+            <h4>${cal.materialName || 'Unnamed Material'}</h4>
+            <p>Nozzle: ${cal.nozzleSize}mm</p>
+            <p>Measurements: ${cal.rows.length}</p>
+            <p>Date: ${cal.date || 'Unknown'}</p>
+            <div class="saved-calibration-actions">
+              <button onclick="loadCalibration(${index})">Load</button>
+              <button onclick="deleteCalibration(${index})" style="background: #dc3545;">Delete</button>
+            </div>
+          `;
+          content.appendChild(item);
+        });
+      }
+
+      Swal.fire({
+        title: 'Saved PE320 Calibrations',
+        html: content,
+        width: '600px',
+        showConfirmButton: false,
+        showCloseButton: true,
+        background: 'var(--panel)',
+        customClass: {
+          popup: 'dark-theme'
+        }
+      });
+    }
+
+    window.loadCalibration = function(index) {
+      const savedData = localStorage.getItem('pe320Calibrations');
+      if (!savedData) return;
+
+      try {
+        const calibrations = JSON.parse(savedData);
+        if (calibrations[index]) {
+          loadCalibrationData(calibrations[index]);
+          Swal.close();
+        }
+      } catch (error) {
+        notify('Error loading calibration', true);
+        console.error('Error loading data:', error);
+      }
+    }
+
+    window.deleteCalibration = function(index) {
+      Swal.fire({
+        title: 'Delete Calibration?',
+        text: 'This action cannot be undone.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Delete',
+        cancelButtonText: 'Cancel',
+        background: 'var(--panel)',
+        customClass: {
+          popup: 'dark-theme'
+        }
+      }).then((result) => {
+        if (result.isConfirmed) {
+          const savedData = localStorage.getItem('pe320Calibrations');
+          if (savedData) {
+            try {
+              const calibrations = JSON.parse(savedData);
+              calibrations.splice(index, 1);
+              localStorage.setItem('pe320Calibrations', JSON.stringify(calibrations));
+              showSavedCalibrations();
+              notify('Calibration deleted');
+            } catch (error) {
+              console.error('Error deleting calibration:', error);
+              notify('Error deleting calibration', true);
+            }
+          }
+        }
+      });
+    }
+
+    function loadCalibrationData(data) {
+      // Clear existing data
+      body.innerHTML = '';
+      rowIdx = 0;
+      
+      // Restore form fields
+      qs('material-name').value = data.materialName || '';
+      qs('nozzle-size').value = data.nozzleSize || '';
+      
+      // Restore rows
+      if (data.rows && data.rows.length > 0) {
+        data.rows.forEach(row => addRow(row.g, row.rpm));
+      } else {
+        addRow();
+      }
+      
+      notify('Calibration loaded successfully');
+    }
+
+    qs('save-data').onclick=()=>{
+      const data = {
+        materialName: qs('material-name').value,
+        nozzleSize: qs('nozzle-size').value,
+        date: new Date().toLocaleDateString(),
+        rows: []
+      };
+      
+      [...body.querySelectorAll('tr')].forEach(r => {
+        const g = r.querySelector('.gmin').value;
+        const rpm = r.querySelector('.rpm').value;
+        if (g || rpm) {
+          data.rows.push({
+            g: g,
+            rpm: rpm
+          });
+        }
+      });
+
+      // Get existing calibrations
+      let calibrations = [];
+      const savedData = localStorage.getItem('pe320Calibrations');
+      if (savedData) {
+        try {
+          calibrations = JSON.parse(savedData);
+        } catch (error) {
+          console.error('Error parsing saved data:', error);
+        }
+      }
+
+      // Add new calibration
+      calibrations.push(data);
+      
+      // Save updated calibrations
+      localStorage.setItem('pe320Calibrations', JSON.stringify(calibrations));
+      notify('Data saved successfully');
+    };
+
+    qs('load-data').onclick=()=>{
+      showSavedCalibrations();
+    };
+
+    // pre‑populate three blank rows
+    for(let i=0;i<3;i++)addRow();
+
+    // Check libraries on load
+    window.addEventListener('load', () => {
+      if (typeof math === 'undefined') {
+        notify('Warning: Math library not loaded. Some features may not work.', true);
+      }
+      if (typeof Chart === 'undefined') {
+        notify('Warning: Chart library not loaded. Graphs will not display.', true);
+      }
+    });
+
+    }); // End DOMContentLoaded
+  </script>
+</body>
+</html>
