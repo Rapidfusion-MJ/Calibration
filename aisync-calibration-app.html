@@ -37,7 +37,7 @@
     #notification.error{background:#dc3545}
     /* Chart area */
     #chart-wrapper{height:400px;background:var(--panel);border-radius:8px;padding:1rem;margin-top:1.5rem}
-    #copy-coeff, #export-csv { display: none; }
+    #copy-coeff, #export-csv, #export-src { display: none; }
     /* Modal styles */
     .saved-calibrations {
       max-height: 400px;
@@ -146,6 +146,10 @@
           <div style="flex: 1;">
             <label for="nozzle-size" style="display: block; margin-bottom: 0.25rem;">Nozzle Size (mm):</label>
             <input type="number" id="nozzle-size" step="0.1" min="0.1" style="width: 100%; padding: 0.4rem; border: 1px solid #4a4a4a; border-radius: 4px; background: #333; color: #fff;">
+          </div>
+          <div style="flex: 1;">
+            <label for="min-rpm" style="display: block; margin-bottom: 0.25rem;">Min RPM:</label>
+            <input type="number" id="min-rpm" step="1" min="0" style="width: 100%; padding: 0.4rem; border: 1px solid #4a4a4a; border-radius: 4px; background: #333; color: #fff;">
           </div>
           <div style="flex: 1;">
             <label for="max-rpm" style="display: block; margin-bottom: 0.25rem;">Max RPM:</label>
@@ -281,6 +285,7 @@
         <div style="float: right; margin-top: -2.5rem;">
           <button id="save-data" style="margin-right: 0.5rem;">Save Data</button>
           <button id="load-data" style="margin-right: 0.5rem;">Load Data</button>
+          <button id="export-src" style="margin-right: 0.5rem;">Export SRC</button>
           <button id="calc-btn">Calculate Coefficients</button>
         </div>
       </div>
@@ -410,26 +415,83 @@
       notify('CSV exported');
     };
 
+    /* --- export SRC --- */
+    qs('export-src').onclick=()=>{
+      const rpms = [...body.querySelectorAll('tr')]
+        .map(r=>parseFloat(r.querySelector('.rpm').value))
+        .filter(v=>!isNaN(v))
+        .sort((a,b)=>a-b);
+
+      if(rpms.length===0){notify('No valid RPM values to export',true);return;}
+
+      const maxRpmForPurge = Math.max(...rpms);
+
+      const header = `&ACCESS RVP\n&PARAM EDITMASK = *\n&PARAM TEMPLATE = C:\\KRC\\Roboter\\Template\\vorgabe\nDEF Throughput_Calibration()\n; === BASE POSITION FOR EXTRUSION ===\nDECL FRAME BasePos\nBasePos = {X 1358.29, Y 1054.84, Z 120.50, A 90.00, B 0.00, C 0.00}\n;FOLD INI\n;FOLD BASISTECH INI\nBAS (#INITMOV,1 )\n;ENDFOLD (BASISTECH INI)\n;FOLD USER INI\n;Make your modifications here\n;ENDFOLD (USER INI)\n;ENDFOLD (INI)\n$ADVANCE = 5\nPTP $AXIS_ACT\n$APO.CPTP = 100\n$APO.CDIS = 1.0000\n$APO.CVEL = 100\n$ACC.CP = 2.500 ;mm/sec/sec\nBAS(#BASE,1)\n$IPO_MODE=#BASE\nBAS(#TOOL,0)\n;FOLD INI\n;FOLD BASISTECH INI\nBAS (#INITMOV,1 )\n;ENDFOLD (BASISTECH INI)\n;FOLD USER INI\n;Make your modifications here\n;ENDFOLD (USER INI)\n;ENDFOLD (INI)\n$BASE = BASE_DATA[1]\n$TOOL = TOOL_DATA [1]\n$LOAD = LOAD_DATA [1]\n$ADVANCE = 5\nPTP $AXIS_ACT\n$APO.CDIS = 1.0000\n$APO.CVEL = 100\n$ACC.CP = 2.500 ;mm/sec/sec\nBAS(#BASE,1)\n$IPO_MODE=#BASE\nBAS(#TOOL,1)\nADAONE = FALSE\nAIBUILD = FALSE\nSTART_SERVO = TRUE ; Initialise PE320 Extruder Servo Motor\nTRIGGER WHEN DISTANCE=0 DELAY=0 DO SPEED=0\n;LAYER 0\n; === SETUP ===\n$VEL={CP 0.05000,ORI1 90.000,ORI2 90.000}\nHALT_MOTOR =FALSE\n$VEL={CP 0.14685,ORI1 90.000,ORI2 90.000}\n; === MOVE TO START POSITION & PURGE ===\nTRIGGER WHEN DISTANCE=0 DELAY=0 DO SPEED=${maxRpmForPurge}\nLIN {X 1358.29, Y 1054.84, Z 120.50, A 90.00, B 0.00, C 0.00} C_DIS\nTRIGGER WHEN DISTANCE=0 DELAY=0 DO SPEED=0\nLIN {X 1361.84, Y 1075.74, Z 120.50, A 90.00, B 0.00, C 0.00} C_DIS\nWAIT SEC 10\n; === EXTRUSION TEST LOOP ===\n`;
+
+      const footer = `; === END ===\nHALT_MOTOR = TRUE\n; === END ===\nHALT_MOTOR = TRUE\n;End\n;PROCESS_OFF\nHALT_MOTOR=TRUE\n;DISABLE MOTOR\n$OUT[732] = FALSE\n$OUT[733] = FALSE\n$OUT[734] = FALSE\n$OUT[735] = FALSE\n$OUT[736] = FALSE\n$OUT[740] = FALSE\nEND\n`;
+
+      let bodySrc = '';
+      rpms.forEach(speed=>{
+        bodySrc += `; Speed ${speed}\n`;
+        bodySrc += `TRIGGER WHEN DISTANCE=0 DELAY=0 DO SPEED=${speed}\n`;
+        bodySrc += `LIN {X 1358.19, Y 1054.84, Z 120.50, A 90.00, B 0.00, C 0.00} C_DIS\n`;
+        bodySrc += `WAIT SEC 70\n`;
+        bodySrc += `TRIGGER WHEN DISTANCE=0 DELAY=0 DO SPEED=0\n`;
+        bodySrc += `LIN BasePos C_DIS\n`;
+        bodySrc += `WAIT SEC 10\n`;
+      });
+
+      const srcContent = header + bodySrc + footer;
+
+      const a=document.createElement('a');
+      a.href='data:text/plain;charset=utf-8,'+encodeURIComponent(srcContent);
+      a.download='Throughput_Calibration.src';
+      a.click();
+      notify('SRC program exported');
+    };
+
     /* --- auto-fill RPM --- */
     qs('auto-fill-rpm').onclick=()=>{
       const maxRpm = parseFloat(qs('max-rpm').value);
+      const minRpmInput = qs('min-rpm').value.trim();
+      const minRpm = minRpmInput === '' ? 0 : parseFloat(minRpmInput);
+
+      // Validation
       if (isNaN(maxRpm) || maxRpm <= 0) {
-        notify('Please enter a valid max RPM value', true);
+        notify('Please enter a valid Max RPM value', true);
         return;
       }
-      
+      if (isNaN(minRpm) || minRpm < 0) {
+        notify('Please enter a valid Min RPM value (≥ 0)', true);
+        return;
+      }
+      if (minRpm >= maxRpm) {
+        notify('Min RPM must be less than Max RPM', true);
+        return;
+      }
+
+      // Decide how many test points we need based on the spread
+      const range = maxRpm - minRpm;
+      let points = 5;        // default
+      if (range > 50) points = 7;
+      if (range > 100) points = 10;
+
+      const step = range / (points - 1);
+
       // Clear existing rows
       body.innerHTML = '';
       rowIdx = 0;
-      
-      // Add 5 rows with calculated RPM values
-      const percentages = [0.2, 0.4, 0.6, 0.8, 1.0];
-      percentages.forEach(percentage => {
-        const rpm = Math.round(maxRpm * percentage);
+
+      // Add rows for each calculated RPM value (rounded to nearest whole number)
+      for (let i = 0; i < points; i++) {
+        const rpm = Math.round(minRpm + i * step);
         addRow('', rpm.toString());
-      });
-      
-      notify('RPM values auto-filled based on max RPM');
+      }
+
+      // Reveal Export SRC button now that we have RPMs to run
+      qs('export-src').style.display='inline-block';
+
+      notify(`RPM values auto-filled (${points} points between ${minRpm} and ${maxRpm})`);
     };
 
     /* --- save/load functionality --- */
