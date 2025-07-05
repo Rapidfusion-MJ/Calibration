@@ -1,0 +1,3576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3D Print Part Analysis Tool</title>
+<!-- Tailwind CSS - Note: For production, use PostCSS plugin or Tailwind CLI -->
+<!-- The CDN warning is expected in development. For production deployment:
+     1. Install Tailwind CSS via npm
+     2. Use PostCSS configuration
+     3. Or use the Tailwind CLI build process
+     More info: https://tailwindcss.com/docs/installation -->
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- Chart.js for visualizations -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.0/chart.min.js"></script>
+<!-- PDF Libraries -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<!-- PDF-lib for merging PDFs -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<!-- Three.js for 3D model viewing -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<!-- STL Loader -->
+<script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/loaders/STLLoader.js"></script>
+
+<style>
+:root {
+--primary-color: #a74e9e;
+--secondary-color: #933c85;
+--bg-dark: #1a1a1a;
+--bg-darker: #141414;
+--bg-card: rgba(43, 43, 43, 0.95);
+--text-light: #e6e6e6;
+--text-dim: #a0a0a0;
+--border-radius: 8px;
+--shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.3);
+--shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
+--shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+--gradient-primary: linear-gradient(135deg, #a74e9e, #834D83);
+--transition-speed: 0.2s;
+}
+
+body {
+font-family: 'Roboto', sans-serif;
+background: var(--bg-dark);
+background-image: 
+    radial-gradient(circle at 100% 0%, rgba(167, 78, 158, 0.12) 0%, transparent 40%),
+    radial-gradient(circle at 0% 100%, rgba(131, 77, 131, 0.12) 0%, transparent 40%);
+color: var(--text-light);
+margin: 0;
+padding: 20px;
+min-height: 100vh;
+line-height: 1.6;
+}
+
+.container {
+max-width: 1200px;
+margin: 0 auto;
+padding: 20px;
+}
+
+.input-field {
+width: 100%;
+padding: 12px 16px;
+border: 1px solid rgba(167, 78, 158, 0.3);
+border-radius: var(--border-radius);
+background: rgba(26, 26, 26, 0.8);
+color: var(--text-light);
+font-size: 16px;
+transition: all var(--transition-speed);
+box-shadow: var(--shadow-sm);
+}
+
+.input-field:focus {
+outline: none;
+border-color: var(--primary-color);
+box-shadow: 0 0 0 3px rgba(167, 78, 158, 0.2);
+background: rgba(26, 26, 26, 0.95);
+}
+
+.label {
+display: block;
+margin-bottom: 8px;
+font-size: 14px;
+color: var(--text-light);
+font-weight: 500;
+}
+
+.button {
+background: var(--gradient-primary);
+color: white;
+border: none;
+padding: 14px 24px;
+border-radius: var(--border-radius);
+cursor: pointer;
+font-size: 16px;
+font-weight: 500;
+width: 100%;
+margin-bottom: 12px;
+transition: all var(--transition-speed);
+box-shadow: var(--shadow-sm);
+display: flex;
+align-items: center;
+justify-content: center;
+gap: 8px;
+}
+
+.button:hover {
+transform: translateY(-1px);
+box-shadow: var(--shadow-md);
+}
+
+.card {
+background: var(--bg-card);
+padding: 24px;
+border-radius: var(--border-radius);
+margin-bottom: 24px;
+border: 1px solid rgba(167, 78, 158, 0.2);
+box-shadow: var(--shadow-lg);
+backdrop-filter: blur(10px);
+}
+
+.tab-button {
+padding: 12px 20px;
+border-bottom: 3px solid transparent;
+background: transparent;
+color: var(--text-dim);
+transition: all var(--transition-speed);
+cursor: pointer;
+font-weight: 500;
+}
+
+.active-tab {
+border-color: var(--primary-color);
+color: var(--text-light);
+background: rgba(167, 78, 158, 0.1);
+}
+
+.btn-icon {
+width: 20px;
+height: 20px;
+stroke: currentColor;
+fill: none;
+stroke-width: 2;
+stroke-linecap: round;
+stroke-linejoin: round;
+}
+
+.upload-area {
+border: 2px dashed rgba(167, 78, 158, 0.3);
+border-radius: var(--border-radius);
+padding: 40px;
+text-align: center;
+background: rgba(167, 78, 158, 0.05);
+transition: all var(--transition-speed);
+cursor: pointer;
+position: relative;
+}
+
+.upload-area:hover {
+border-color: var(--primary-color);
+background: rgba(167, 78, 158, 0.1);
+}
+
+.upload-area.dragover {
+border-color: var(--primary-color);
+background: rgba(167, 78, 158, 0.15);
+}
+
+.file-item {
+background: rgba(26, 26, 26, 0.6);
+border: 1px solid rgba(167, 78, 158, 0.3);
+border-radius: var(--border-radius);
+padding: 12px;
+margin: 8px 0;
+display: flex;
+align-items: center;
+justify-content: space-between;
+}
+
+.file-item .file-info {
+display: flex;
+align-items: center;
+gap: 12px;
+}
+
+.file-item .file-icon {
+width: 32px;
+height: 32px;
+background: var(--primary-color);
+border-radius: 4px;
+display: flex;
+align-items: center;
+justify-content: center;
+}
+
+.progress-bar {
+width: 100%;
+height: 8px;
+background: rgba(167, 78, 158, 0.2);
+border-radius: 4px;
+overflow: hidden;
+margin: 20px 0;
+}
+
+.progress-fill {
+height: 100%;
+background: var(--gradient-primary);
+width: 0%;
+transition: width 0.3s ease;
+}
+
+.analysis-section {
+background: rgba(167, 78, 158, 0.1);
+border: 1px solid rgba(167, 78, 158, 0.3);
+border-radius: var(--border-radius);
+padding: 20px;
+margin: 16px 0;
+}
+
+.metric-grid {
+display: grid;
+grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+gap: 16px;
+margin: 20px 0;
+}
+
+.metric-card {
+background: rgba(26, 26, 26, 0.6);
+padding: 16px;
+border-radius: var(--border-radius);
+border: 1px solid rgba(167, 78, 158, 0.2);
+}
+
+.image-gallery {
+display: grid;
+grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+gap: 16px;
+margin: 20px 0;
+}
+
+.image-item {
+position: relative;
+border: 1px solid rgba(167, 78, 158, 0.3);
+border-radius: var(--border-radius);
+overflow: hidden;
+background: rgba(26, 26, 26, 0.4);
+}
+
+.image-container {
+height: 160px;
+display: flex;
+align-items: center;
+justify-content: center;
+overflow: hidden;
+background: rgba(167, 78, 158, 0.1);
+}
+
+.image-container img {
+max-width: 100%;
+max-height: 100%;
+object-fit: contain;
+}
+
+.step-indicator {
+display: flex;
+justify-content: space-between;
+margin-bottom: 30px;
+}
+
+.step {
+display: flex;
+align-items: center;
+flex: 1;
+}
+
+.step-number {
+width: 32px;
+height: 32px;
+border-radius: 50%;
+background: rgba(167, 78, 158, 0.2);
+display: flex;
+align-items: center;
+justify-content: center;
+font-weight: bold;
+margin-right: 12px;
+}
+
+.step.active .step-number {
+background: var(--primary-color);
+color: white;
+}
+
+.step.completed .step-number {
+background: #28a745;
+}
+
+.step-line {
+flex: 1;
+height: 2px;
+background: rgba(167, 78, 158, 0.2);
+margin: 0 10px;
+}
+
+.step.active .step-line,
+.step.completed .step-line {
+background: var(--primary-color);
+}
+
+.material-datasheet {
+background: rgba(58, 134, 255, 0.1);
+border: 1px solid rgba(58, 134, 255, 0.3);
+border-radius: var(--border-radius);
+padding: 20px;
+margin: 16px 0;
+}
+
+.custom-material-fields {
+background: rgba(255, 193, 7, 0.1);
+border: 1px solid rgba(255, 193, 7, 0.3);
+border-radius: var(--border-radius);
+padding: 20px;
+margin: 16px 0;
+display: none;
+}
+
+.cost-breakdown {
+background: rgba(40, 167, 69, 0.1);
+border: 1px solid rgba(40, 167, 69, 0.3);
+border-radius: var(--border-radius);
+padding: 20px;
+}
+
+.manufacturing-process {
+background: rgba(255, 193, 7, 0.1);
+border: 1px solid rgba(255, 193, 7, 0.3);
+border-radius: var(--border-radius);
+padding: 20px;
+margin: 16px 0;
+}
+
+.pdf-content {
+background: white;
+color: black;
+padding: 30px;
+font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+line-height: 1.6;
+}
+
+.pdf-content h1 { color: #a74e9e; font-size: 28px; margin-bottom: 10px; }
+.pdf-content h2 { color: #a74e9e; font-size: 22px; margin: 25px 0 15px 0; border-bottom: 2px solid #a74e9e; padding-bottom: 5px; }
+.pdf-content h3 { color: #333; font-size: 18px; margin: 20px 0 10px 0; }
+.pdf-content table { border-collapse: collapse; width: 100%; margin: 15px 0; }
+.pdf-content th { background: rgba(167, 78, 158, 0.1); color: #a74e9e; padding: 12px; border: 1px solid #ccc; text-align: left; }
+.pdf-content td { padding: 10px; border: 1px solid #ccc; }
+.pdf-content .cost-summary { background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; }
+.pdf-content .highlight-box { background: #e8f4fd; border-left: 4px solid #a74e9e; padding: 15px; margin: 15px 0; }
+.pdf-content ul { list-style-type: disc; margin: 10px 0 10px 30px; padding: 0; }
+.pdf-content ol { list-style-type: decimal; margin: 10px 0 10px 30px; padding: 0; }
+.pdf-content li { margin: 5px 0; line-height: 1.6; }
+.pdf-content ul ul { list-style-type: circle; margin-left: 20px; }
+.pdf-content ol ol { list-style-type: lower-alpha; margin-left: 20px; }
+
+/* Load button styles */
+.load-button-container {
+background: rgba(167, 78, 158, 0.1);
+border: 1px solid rgba(167, 78, 158, 0.3);
+border-radius: var(--border-radius);
+padding: 16px;
+margin-bottom: 20px;
+display: flex;
+justify-content: space-between;
+align-items: center;
+}
+
+.load-button-container h3 {
+color: var(--primary-color);
+margin-bottom: 4px;
+font-weight: 500;
+}
+
+.load-button-container p {
+color: var(--text-dim);
+font-size: 0.875rem;
+}
+
+@media (max-width: 768px) {
+.container { padding: 10px; }
+.metric-grid { grid-template-columns: 1fr; }
+.step-indicator { flex-direction: column; gap: 10px; }
+.step-line { display: none; }
+}
+
+.pdf-loading-overlay {
+position: fixed;
+top: 0;
+left: 0;
+right: 0;
+bottom: 0;
+background: rgba(0, 0, 0, 0.8);
+z-index: 9999;
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+}
+
+.pdf-spinner {
+width: 50px;
+height: 50px;
+border: 4px solid rgba(167, 78, 158, 0.3);
+border-radius: 50%;
+border-top-color: #a74e9e;
+animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+0% { transform: rotate(0deg); }
+100% { transform: rotate(360deg); }
+}
+
+.remove-btn {
+background: #dc3545;
+color: white;
+border: none;
+padding: 4px 8px;
+border-radius: 4px;
+cursor: pointer;
+font-size: 12px;
+}
+
+.remove-btn:hover {
+background: #c82333;
+}
+
+/* Rich Text Editor Toolbar */
+.editor-toolbar {
+background: rgba(26, 26, 26, 0.95);
+border: 1px solid rgba(167, 78, 158, 0.3);
+border-bottom: none;
+border-radius: var(--border-radius) var(--border-radius) 0 0;
+padding: 10px;
+display: flex;
+gap: 6px;
+flex-wrap: wrap;
+align-items: center;
+box-shadow: var(--shadow-sm);
+}
+
+.editor-btn {
+background: rgba(167, 78, 158, 0.15);
+border: 1px solid rgba(167, 78, 158, 0.3);
+color: var(--text-light);
+padding: 8px 12px;
+border-radius: 4px;
+cursor: pointer;
+font-size: 14px;
+transition: all 0.2s;
+display: inline-flex;
+align-items: center;
+justify-content: center;
+min-width: 36px;
+height: 36px;
+position: relative;
+}
+
+.editor-btn:hover {
+background: rgba(167, 78, 158, 0.4);
+border-color: var(--primary-color);
+transform: translateY(-1px);
+}
+
+.editor-btn:active {
+transform: translateY(0);
+}
+
+.editor-btn.active {
+background: var(--primary-color);
+color: white;
+border-color: var(--primary-color);
+}
+
+.editor-btn[title]:hover::after {
+content: attr(title);
+position: absolute;
+bottom: 100%;
+left: 50%;
+transform: translateX(-50%);
+background: rgba(0, 0, 0, 0.9);
+color: white;
+padding: 6px 10px;
+border-radius: 4px;
+font-size: 12px;
+white-space: nowrap;
+z-index: 1000;
+margin-bottom: 5px;
+pointer-events: none;
+opacity: 0;
+animation: tooltipFade 0.3s ease-in 0.5s forwards;
+}
+
+.editor-btn[title]:hover::before {
+content: '';
+position: absolute;
+bottom: 100%;
+left: 50%;
+transform: translateX(-50%);
+border: 5px solid transparent;
+border-top-color: rgba(0, 0, 0, 0.9);
+margin-bottom: -5px;
+pointer-events: none;
+opacity: 0;
+animation: tooltipFade 0.3s ease-in 0.5s forwards;
+}
+
+@keyframes tooltipFade {
+to {
+opacity: 1;
+}
+}
+
+.editor-separator {
+width: 1px;
+height: 24px;
+background: rgba(167, 78, 158, 0.3);
+margin: 0 4px;
+}
+
+.editor-dropdown {
+position: relative;
+display: inline-block;
+}
+
+.editor-dropdown select {
+background: rgba(26, 26, 26, 0.8);
+border: 1px solid rgba(167, 78, 158, 0.3);
+color: var(--text-light);
+padding: 8px 12px;
+padding-right: 30px;
+border-radius: 4px;
+cursor: pointer;
+font-size: 14px;
+appearance: none;
+-webkit-appearance: none;
+-moz-appearance: none;
+height: 36px;
+transition: all 0.2s;
+}
+
+.editor-dropdown select:hover {
+background: rgba(167, 78, 158, 0.15);
+border-color: var(--primary-color);
+}
+
+.editor-dropdown select:focus {
+outline: none;
+border-color: var(--primary-color);
+box-shadow: 0 0 0 3px rgba(167, 78, 158, 0.2);
+}
+
+.editor-dropdown::after {
+content: '▼';
+position: absolute;
+right: 10px;
+top: 50%;
+transform: translateY(-50%);
+pointer-events: none;
+font-size: 10px;
+color: var(--text-dim);
+}
+
+.rich-text-editor {
+background: rgba(26, 26, 26, 0.8);
+border: 1px solid rgba(167, 78, 158, 0.3);
+border-radius: 0 0 var(--border-radius) var(--border-radius);
+padding: 16px;
+min-height: 120px;
+color: var(--text-light);
+overflow-y: auto;
+max-height: 300px;
+font-family: 'Roboto', sans-serif;
+font-size: 16px;
+line-height: 1.6;
+}
+
+.rich-text-editor:focus {
+outline: none;
+border-color: var(--primary-color);
+box-shadow: 0 0 0 3px rgba(167, 78, 158, 0.2);
+background: rgba(26, 26, 26, 0.95);
+}
+
+.rich-text-editor h1 { font-size: 24px; font-weight: bold; margin: 10px 0; color: var(--primary-color); }
+.rich-text-editor h2 { font-size: 20px; font-weight: bold; margin: 8px 0; color: var(--primary-color); }
+.rich-text-editor h3 { font-size: 18px; font-weight: bold; margin: 6px 0; color: var(--text-light); }
+.rich-text-editor blockquote { 
+border-left: 4px solid var(--primary-color); 
+padding-left: 16px; 
+margin: 10px 0;
+color: var(--text-dim);
+font-style: italic;
+}
+.rich-text-editor ul { 
+list-style-type: disc !important; 
+list-style-position: outside !important;
+margin: 10px 0 10px 30px !important; 
+padding: 0 !important;
+display: block !important;
+}
+.rich-text-editor ol { 
+list-style-type: decimal !important; 
+list-style-position: outside !important;
+margin: 10px 0 10px 30px !important; 
+padding: 0 !important;
+display: block !important;
+}
+.rich-text-editor li {
+margin: 5px 0 !important;
+display: list-item !important;
+}
+.rich-text-editor ul ul { 
+list-style-type: circle !important; 
+margin-left: 20px !important;
+}
+.rich-text-editor ol ol { 
+list-style-type: lower-alpha !important; 
+margin-left: 20px !important;
+}
+.rich-text-editor pre { 
+background: rgba(0, 0, 0, 0.3); 
+padding: 10px; 
+border-radius: 4px; 
+overflow-x: auto;
+font-family: monospace;
+margin: 10px 0;
+}
+.rich-text-editor a { color: var(--primary-color); text-decoration: underline; }
+
+/* Ensure list markers show in contenteditable */
+[contenteditable="true"] ul,
+[contenteditable="true"] ol {
+list-style-position: outside !important;
+}
+
+/* 3D Model Viewer Styles */
+.model-viewer {
+width: 100%;
+height: 400px;
+background: rgba(26, 26, 26, 0.8);
+border: 2px solid rgba(167, 78, 158, 0.3);
+border-radius: var(--border-radius);
+margin: 20px 0;
+position: relative;
+overflow: hidden;
+}
+
+.model-controls {
+position: absolute;
+bottom: 10px;
+left: 10px;
+background: rgba(0, 0, 0, 0.7);
+padding: 10px;
+border-radius: 4px;
+color: white;
+font-size: 12px;
+}
+
+.pdf-viewer {
+width: 100%;
+height: 600px;
+border: 2px solid rgba(167, 78, 158, 0.3);
+border-radius: var(--border-radius);
+margin: 20px 0;
+background: #525659;
+position: relative;
+}
+
+.pdf-viewer iframe {
+width: 100%;
+height: 100%;
+border: none;
+border-radius: var(--border-radius);
+}
+
+.pdf-viewer .viewer-error {
+position: absolute;
+top: 50%;
+left: 50%;
+transform: translate(-50%, -50%);
+text-align: center;
+width: 80%;
+max-width: 400px;
+}
+
+.pdf-viewer .viewer-error .button {
+margin: 20px auto 0;
+max-width: 200px;
+}
+
+.viewer-placeholder {
+display: flex;
+align-items: center;
+justify-content: center;
+height: 100%;
+color: var(--text-dim);
+text-align: center;
+flex-direction: column;
+gap: 20px;
+}
+
+.viewer-placeholder svg {
+width: 64px;
+height: 64px;
+opacity: 0.3;
+}
+
+.viewer-error {
+background: rgba(220, 53, 69, 0.1);
+border: 1px solid rgba(220, 53, 69, 0.3);
+padding: 20px;
+border-radius: var(--border-radius);
+margin: 10px 0;
+color: #dc3545;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* Notification styles */
+.notification {
+position: fixed;
+top: 20px;
+right: 20px;
+z-index: 1100;
+max-width: 400px;
+border-radius: var(--border-radius);
+box-shadow: var(--shadow-lg);
+animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+from { transform: translateX(100%); opacity: 0; }
+to { transform: translateX(0); opacity: 1; }
+}
+
+.notification-content {
+display: flex;
+justify-content: space-between;
+align-items: center;
+padding: 12px 16px;
+border-radius: var(--border-radius);
+}
+
+.notification-info .notification-content {
+background: rgba(0, 123, 255, 0.2);
+border: 1px solid rgba(0, 123, 255, 0.5);
+}
+
+.notification-success .notification-content {
+background: rgba(40, 167, 69, 0.2);
+border: 1px solid rgba(40, 167, 69, 0.5);
+}
+
+.notification-warning .notification-content {
+background: rgba(255, 193, 7, 0.2);
+border: 1px solid rgba(255, 193, 7, 0.5);
+}
+
+.notification-error .notification-content {
+background: rgba(220, 53, 69, 0.2);
+border: 1px solid rgba(220, 53, 69, 0.5);
+}
+
+.notification-close {
+background: transparent;
+border: none;
+color: var(--text-light);
+font-size: 18px;
+cursor: pointer;
+margin-left: 12px;
+}
+
+/* Save button in header */
+.header-save-container {
+position: absolute;
+top: 12px;
+right: 20px;
+display: flex;
+gap: 10px;
+}
+
+.header-button {
+background: var(--gradient-primary);
+color: white;
+border: none;
+padding: 8px 16px;
+border-radius: var(--border-radius);
+cursor: pointer;
+font-size: 14px;
+font-weight: 500;
+transition: all var(--transition-speed);
+box-shadow: var(--shadow-sm);
+display: flex;
+align-items: center;
+gap: 8px;
+}
+
+.header-button:hover {
+transform: translateY(-1px);
+box-shadow: var(--shadow-md);
+}
+
+.header-button .btn-icon {
+width: 16px;
+height: 16px;
+}
+</style>
+</head>
+
+<body>
+<div class="container">
+<!-- Header -->
+<div class="card" style="position: relative;">
+<h1 class="text-3xl font-bold text-center mb-4" style="color: var(--primary-color);">
+3D Print Part Analysis Tool
+</h1>
+<p class="text-center text-dim">
+Comprehensive analysis for 3D printing and hybrid manufacturing processes
+</p>
+
+<!-- Save/Load buttons in header -->
+<div class="header-save-container">
+<button class="header-button" onclick="exportProjectData()">
+<svg viewBox="0 0 24 24" class="btn-icon">
+<path d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path>
+</svg>
+Save Project
+</button>
+<button class="header-button" onclick="importProjectData()">
+<svg viewBox="0 0 24 24" class="btn-icon">
+<path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+</svg>
+Load Project
+</button>
+</div>
+
+<!-- Progress Indicator -->
+<div class="step-indicator mt-8">
+<div class="step active" id="step-overview">
+<div class="step-number">1</div>
+<span>Overview</span>
+<div class="step-line"></div>
+</div>
+<div class="step" id="step-analysis">
+<div class="step-number">2</div>
+<span>Analysis</span>
+<div class="step-line"></div>
+</div>
+<div class="step" id="step-manufacturing">
+<div class="step-number">3</div>
+<span>Manufacturing</span>
+<div class="step-line"></div>
+</div>
+<div class="step" id="step-report">
+<div class="step-number">4</div>
+<span>Report</span>
+</div>
+</div>
+</div>
+
+<!-- Load Project Section at the top -->
+<div class="load-button-container">
+<div>
+<h3>Load Previous Project</h3>
+<p>Import a previously saved project file to continue working on it.</p>
+</div>
+<button class="button" style="max-width: 180px; margin: 0;" onclick="importProjectData()">
+<svg class="btn-icon" viewBox="0 0 24 24">
+<path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+</svg>
+Load Project
+</button>
+</div>
+
+<!-- Navigation Tabs -->
+<div class="card">
+<div class="flex space-x-1 mb-6 border-b border-gray-700">
+<button id="tab-overview" class="tab-button active-tab" onclick="switchView('overview')">
+Part Overview
+</button>
+<button id="tab-analysis" class="tab-button" onclick="switchView('analysis')">
+Part Analysis
+</button>
+<button id="tab-manufacturing" class="tab-button" onclick="switchView('manufacturing')">
+Manufacturing
+</button>
+<button id="tab-report" class="tab-button" onclick="switchView('report')">
+Final Report
+</button>
+</div>
+
+<!-- Overview View -->
+<div id="view-overview">
+<h2 class="text-2xl font-bold mb-6" style="color: var(--primary-color);">Part Overview</h2>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+<div>
+<label class="label">Client Name *</label>
+<input type="text" id="clientName" class="input-field" placeholder="e.g., Creative Composites" required>
+</div>
+<div>
+<label class="label">Project Reference *</label>
+<input type="text" id="projectRef" class="input-field" placeholder="e.g., Bus Roof Analysis" required>
+</div>
+</div>
+
+<div class="mt-6">
+<label class="label">Part Description *</label>
+<div class="editor-toolbar">
+<!-- Text Formatting -->
+<button class="editor-btn" onclick="formatText('bold', 'partDescription')" title="Bold (Ctrl+B)">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+<path d="M13.5 15.5H10V12.5H13.5A1.5 1.5 0 0 1 15 14A1.5 1.5 0 0 1 13.5 15.5M10 6.5H13A1.5 1.5 0 0 1 14.5 8A1.5 1.5 0 0 1 13 9.5H10M15.6 10.79C16.57 10.11 17.25 9.02 17.25 8C17.25 5.74 15.5 4 13.25 4H7V18H14.04C16.14 18 17.75 16.3 17.75 14.21C17.75 12.69 16.89 11.39 15.6 10.79Z"/>
+</svg>
+</button>
+<button class="editor-btn" onclick="formatText('italic', 'partDescription')" title="Italic (Ctrl+I)">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+<path d="M10 4V7H12.21L8.79 15H6V18H14V15H11.79L15.21 7H18V4H10Z"/>
+</svg>
+</button>
+<button class="editor-btn" onclick="formatText('underline', 'partDescription')" title="Underline (Ctrl+U)">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+<path d="M5 21H19V19H5V21M12 17A6 6 0 0 0 18 11V3H15.5V11A3.5 3.5 0 0 1 12 14.5A3.5 3.5 0 0 1 8.5 11V3H6V11A6 6 0 0 0 12 17Z"/>
+</svg>
+</button>
+<button class="editor-btn" onclick="formatText('strikethrough', 'partDescription')" title="Strikethrough">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+<path d="M23 12V14H18.61C19.61 16.14 19.56 22 12.38 22C4.05 22 4.37 15.5 4.37 15.5L8.34 15.55C8.34 15.55 8.14 18.82 11.79 18.82C14.54 18.82 14.46 16.63 14.46 16.63C14.46 16.63 14.46 15.12 14.46 14H1V12H23M21.97 8.64C21.97 8.64 20.74 3 12.48 3C6.93 3 5.89 7.3 5.89 7.3L9.9 7.24C9.9 7.24 10.59 5.18 12.6 5.18C15.68 5.18 15.59 7.68 15.59 7.68C15.59 7.68 15.79 9.65 15.96 11.04L11.58 11C7.83 8.87 1.65 8.91 1.65 8.91V11.17L1.67 11.04C1.67 11.04 7.67 11.04 12.52 12.69L12.45 12.75L12.42 12.69C12.42 12.69 16.52 13.74 17.88 11.04L20.3 11.04C19.86 9.5 18.96 7.2 16.71 6.07C14.26 4.84 11.35 4.93 10.51 5.03L10.63 7.19C10.63 7.19 11.94 7.12 13.27 7.56C15.02 8.13 15.54 9.01 15.96 9.68L15.94 9.68C15.94 9.68 13.17 9.49 11.04 10.08L10.35 11.04H16.82C17.09 11.04 21.19 11.15 21.97 8.64Z"/>
+</svg>
+</button>
+<div class="editor-separator"></div>
+<!-- Headers -->
+<select class="editor-dropdown" onchange="formatText(this.value, 'partDescription'); this.value='';" title="Heading">
+<option value="">Heading</option>
+<option value="h1">Heading 1</option>
+<option value="h2">Heading 2</option>
+<option value="h3">Heading 3</option>
+</select>
+<div class="editor-separator"></div>
+<!-- Lists -->
+<button class="editor-btn" onclick="formatText('bullet', 'partDescription')" title="Bullet List">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+<path d="M7 5H21V7H7V5M7 13V11H21V13H7M4 4.5A1.5 1.5 0 0 1 5.5 6A1.5 1.5 0 0 1 4 7.5A1.5 1.5 0 0 1 2.5 6A1.5 1.5 0 0 1 4 4.5M4 10.5A1.5 1.5 0 0 1 5.5 12A1.5 1.5 0 0 1 4 13.5A1.5 1.5 0 0 1 2.5 12A1.5 1.5 0 0 1 4 10.5M7 19V17H21V19H7M4 16.5A1.5 1.5 0 0 1 5.5 18A1.5 1.5 0 0 1 4 19.5A1.5 1.5 0 0 1 2.5 18A1.5 1.5 0 0 1 4 16.5Z"/>
+</svg>
+</button>
+<button class="editor-btn" onclick="formatText('number', 'partDescription')" title="Numbered List">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+<path d="M7 13V11H21V13H7M7 19V17H21V19H7M7 7V5H21V7H7M3 8V5H2V4H4V8H3M2 17V16H5V20H2V19H4V18.5H3V17.5H4V17H2M4.25 10A.75.75 0 0 1 5 10.75C5 10.95 4.92 11.14 4.79 11.27L3.12 13H5V14H2V13.08L4 11H2V10H4.25Z"/>
+</svg>
+</button>
+<div class="editor-separator"></div>
+<!-- Special -->
+<button class="editor-btn" onclick="formatText('quote', 'partDescription')" title="Quote">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+<path d="M14 17H17L19 13V7H13V13H16M6 17H9L11 13V7H5V13H8L6 17Z"/>
+</svg>
+</button>
+<button class="editor-btn" onclick="formatText('code', 'partDescription')" title="Code/Monospace">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+<path d="M8 3A2 2 0 0 0 6 5V9A2 2 0 0 1 4 11H3V13H4A2 2 0 0 1 6 15V19A2 2 0 0 0 8 21H10V19H8V14A2 2 0 0 0 7 12A2 2 0 0 0 8 10V5H10V3M16 3A2 2 0 0 1 18 5V9A2 2 0 0 0 20 11H21V13H20A2 2 0 0 0 18 15V19A2 2 0 0 1 16 21H14V19H16V14A2 2 0 0 1 17 12A2 2 0 0 1 16 10V5H14V3H16Z"/>
+</svg>
+</button>
+<button class="editor-btn" onclick="formatText('link', 'partDescription')" title="Insert Link">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+<path d="M3.9 12C3.9 10.29 5.29 8.9 7 8.9H11V7H7A5 5 0 0 0 2 12A5 5 0 0 0 7 17H11V15.1H7C5.29 15.1 3.9 13.71 3.9 12M8 13H16V11H8V13M17 7H13V8.9H17C18.71 8.9 20.1 10.29 20.1 12C20.1 13.71 18.71 15.1 17 15.1H13V17H17A5 5 0 0 0 22 12A5 5 0 0 0 17 7Z"/>
+</svg>
+</button>
+<div class="editor-separator"></div>
+<!-- Actions -->
+<button class="editor-btn" onclick="formatText('clear', 'partDescription')" title="Clear Formatting">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+<path d="M6 5V5.18L8.82 8H11.22L10.5 9.68L12.6 11.78L14.21 8H20V5H6M3.27 5L2 6.27L8.97 13.24L6.5 19H9.5L11.07 15.34L16.73 21L18 19.73L3.55 5.27L3.27 5Z"/>
+</svg>
+</button>
+</div>
+<div id="partDescription" class="rich-text-editor" contenteditable="true" 
+     data-placeholder="Describe the part, its function, and key requirements..."></div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-6">
+<div>
+<label class="label">Part Dimensions (mm)</label>
+<input type="text" id="partDimensions" class="input-field" placeholder="e.g., 2349x354x450">
+</div>
+<div>
+<label class="label">Current Manufacturing Method</label>
+<select id="currentMethod" class="input-field" onchange="toggleOtherMethod()">
+<option value="moulding">Traditional Moulding</option>
+<option value="machining">CNC Machining</option>
+<option value="composite">Composite Layup</option>
+<option value="other">Other</option>
+</select>
+</div>
+<div>
+<label class="label">Analysis Purpose</label>
+<select id="analysisPurpose" class="input-field">
+<option value="cost_reduction">Cost Reduction</option>
+<option value="lead_time">Lead Time Improvement</option>
+<option value="design_freedom">Design Freedom</option>
+<option value="prototyping">Rapid Prototyping</option>
+<option value="small_batch">Small Batch Production</option>
+</select>
+</div>
+</div>
+
+<div id="otherMethodField" style="display: none;" class="mt-4">
+<label class="label">Specify Other Method</label>
+<input type="text" id="otherMethodText" class="input-field" placeholder="Please specify the manufacturing method">
+</div>
+
+<!-- File Upload Areas -->
+<div class="mt-8">
+<h3 class="text-xl font-semibold mb-4" style="color: var(--primary-color);">Upload Part Files</h3>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+<div>
+<label class="label">3D Model File (STL)</label>
+<div class="upload-area" id="modelUploadArea">
+<svg class="btn-icon mx-auto mb-2" viewBox="0 0 24 24">
+<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+<polyline points="14,2 14,8 20,8"></polyline>
+<line x1="16" y1="13" x2="8" y2="13"></line>
+<line x1="16" y1="17" x2="8" y2="17"></line>
+<polyline points="10,9 9,9 8,9"></polyline>
+</svg>
+<p>Click to upload STL model file</p>
+<p class="text-sm text-dim">Only STL format supported for 3D preview</p>
+</div>
+<input type="file" id="modelFile" accept=".stl" style="display: none;">
+<div id="modelFileList"></div>
+</div>
+
+<div>
+<label class="label">Reference Images</label>
+<div class="upload-area" id="imagesUploadArea">
+<svg class="btn-icon mx-auto mb-2" viewBox="0 0 24 24">
+<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+<circle cx="8.5" cy="8.5" r="1.5"></circle>
+<polyline points="21,15 16,10 5,21"></polyline>
+</svg>
+<p>Click to upload reference images</p>
+<p class="text-sm text-dim">JPG, PNG, PDF accepted</p>
+</div>
+<input type="file" id="referenceImages" accept="image/*,.pdf" multiple style="display: none;">
+<div id="referenceImagesList"></div>
+</div>
+</div>
+
+<div id="uploadedFiles" class="image-gallery mt-6">
+<!-- Uploaded files will appear here -->
+</div>
+
+<!-- 3D Model Viewer -->
+<div id="modelViewerContainer" style="display: none;">
+<h3 class="text-xl font-semibold mb-4" style="color: var(--primary-color);">3D Model Preview</h3>
+<div id="modelViewer" class="model-viewer">
+<div class="viewer-placeholder">
+<svg viewBox="0 0 24 24" fill="currentColor" style="width: 64px; height: 64px; opacity: 0.3;">
+<path d="M12,2L2,7V17L12,22L22,17V7L12,2M12,4.09L19.38,7.88L12,11.65L4.62,7.88L12,4.09M4,9.35L11,13V19.88L4,16.21V9.35M13,19.88V13L20,9.35V16.21L13,19.88Z"/>
+</svg>
+<p>3D model will be displayed here</p>
+<p class="text-sm text-dim">Upload an STL file to view the 3D model</p>
+</div>
+<div class="model-controls">
+<p>🖱️ Left click: Rotate | Right click: Pan | Scroll: Zoom</p>
+</div>
+</div>
+</div>
+</div>
+
+<div class="flex justify-end mt-8">
+<button class="button" style="max-width: 200px;" onclick="switchView('analysis')">
+<svg class="btn-icon" viewBox="0 0 24 24">
+<path d="m9 18 6-6-6-6"></path>
+</svg>
+Continue to Analysis
+</button>
+</div>
+</div>
+
+<!-- Analysis View -->
+<div id="view-analysis" class="hidden">
+<h2 class="text-2xl font-bold mb-6" style="color: var(--primary-color);">Part Analysis</h2>
+
+<!-- Material Selection -->
+<div class="material-datasheet">
+<h3 class="text-xl font-semibold mb-4">Material Selection</h3>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+<div>
+<label class="label">Suggested Material</label>
+<select id="materialType" class="input-field" onchange="toggleCustomMaterial()">
+<option value="pc_cf">PC-Carbon Fiber (Dahltram C-250CF)</option>
+<option value="abs_cf">ABS-Carbon Fiber</option>
+<option value="peek">PEEK</option>
+<option value="peek_cf">PEEK-Carbon Fiber</option>
+<option value="pei">PEI (Ultem)</option>
+<option value="nylon_cf">Nylon-Carbon Fiber</option>
+<option value="custom">Custom Material</option>
+</select>
+</div>
+<div>
+<label class="label">Material Cost (£/kg)</label>
+<input type="number" id="materialCost" class="input-field" value="25" min="1">
+</div>
+</div>
+
+<!-- Custom Material Fields -->
+<div id="customMaterialFields" class="custom-material-fields">
+<h4 class="text-lg font-semibold mb-3">Custom Material Details</h4>
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+<div>
+<label class="label">Material Name</label>
+<input type="text" id="customMaterialName" class="input-field" placeholder="e.g., Custom PEEK Blend">
+</div>
+<div>
+<label class="label">Supplier</label>
+<input type="text" id="customMaterialSupplier" class="input-field" placeholder="e.g., Stratasys, 3D Systems">
+</div>
+<div>
+<label class="label">Tensile Strength (MPa)</label>
+<input type="number" id="customTensileStrength" class="input-field" placeholder="e.g., 132.4">
+</div>
+<div>
+<label class="label">Density (g/cc)</label>
+<input type="number" id="customDensity" class="input-field" step="0.01" placeholder="e.g., 1.21">
+</div>
+<div>
+<label class="label">Print Temperature (°C)</label>
+<input type="number" id="customPrintTemp" class="input-field" placeholder="e.g., 280">
+</div>
+<div>
+<label class="label">Bed Temperature (°C)</label>
+<input type="number" id="customBedTemp" class="input-field" placeholder="e.g., 120">
+</div>
+</div>
+<div class="mt-4">
+<label class="label">Additional Material Notes</label>
+<div class="editor-toolbar">
+<button class="editor-btn" onclick="formatText('bold', 'customMaterialNotes')" title="Bold">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+<path d="M13.5 15.5H10V12.5H13.5A1.5 1.5 0 0 1 15 14A1.5 1.5 0 0 1 13.5 15.5M10 6.5H13A1.5 1.5 0 0 1 14.5 8A1.5 1.5 0 0 1 13 9.5H10M15.6 10.79C16.57 10.11 17.25 9.02 17.25 8C17.25 5.74 15.5 4 13.25 4H7V18H14.04C16.14 18 17.75 16.3 17.75 14.21C17.75 12.69 16.89 11.39 15.6 10.79Z"/>
+</svg>
+</button>
+<button class="editor-btn" onclick="formatText('italic', 'customMaterialNotes')" title="Italic">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+<path d="M10 4V7H12.21L8.79 15H6V18H14V15H11.79L15.21 7H18V4H10Z"/>
+</svg>
+</button>
+<button class="editor-btn" onclick="formatText('underline', 'customMaterialNotes')" title="Underline">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+<path d="M5 21H19V19H5V21M12 17A6 6 0 0 0 18 11V3H15.5V11A3.5 3.5 0 0 1 12 14.5A3.5 3.5 0 0 1 8.5 11V3H6V11A6 6 0 0 0 12 17Z"/>
+</svg>
+</button>
+<div class="editor-separator"></div>
+<button class="editor-btn" onclick="formatText('bullet', 'customMaterialNotes')" title="Bullet List">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+<path d="M7 5H21V7H7V5M7 13V11H21V13H7M4 4.5A1.5 1.5 0 0 1 5.5 6A1.5 1.5 0 0 1 4 7.5A1.5 1.5 0 0 1 2.5 6A1.5 1.5 0 0 1 4 4.5M4 10.5A1.5 1.5 0 0 1 5.5 12A1.5 1.5 0 0 1 4 13.5A1.5 1.5 0 0 1 2.5 12A1.5 1.5 0 0 1 4 10.5M7 19V17H21V19H7M4 16.5A1.5 1.5 0 0 1 5.5 18A1.5 1.5 0 0 1 4 19.5A1.5 1.5 0 0 1 2.5 18A1.5 1.5 0 0 1 4 16.5Z"/>
+</svg>
+</button>
+<button class="editor-btn" onclick="formatText('number', 'customMaterialNotes')" title="Numbered List">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+<path d="M7 13V11H21V13H7M7 19V17H21V19H7M7 7V5H21V7H7M3 8V5H2V4H4V8H3M2 17V16H5V20H2V19H4V18.5H3V17.5H4V17H2M4.25 10A.75.75 0 0 1 5 10.75C5 10.95 4.92 11.14 4.79 11.27L3.12 13H5V14H2V13.08L4 11H2V10H4.25Z"/>
+</svg>
+</button>
+</div>
+<div id="customMaterialNotes" class="rich-text-editor" contenteditable="true" 
+     data-placeholder="Special handling requirements, post-processing notes, etc..."></div>
+</div>
+</div>
+
+<div class="mt-4">
+<label class="label">Upload Material Datasheet (PDF)</label>
+<div class="upload-area" id="datasheetUploadArea">
+<svg class="btn-icon mx-auto mb-2" viewBox="0 0 24 24">
+<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+<polyline points="14,2 14,8 20,8"></polyline>
+</svg>
+<p>Upload material technical datasheet</p>
+<p class="text-sm text-dim">PDF files will display inline for easy reference</p>
+</div>
+<input type="file" id="materialDatasheet" accept=".pdf,.doc,.docx" style="display: none;">
+<div id="datasheetFileList"></div>
+
+<!-- PDF Viewer -->
+<div id="pdfViewerContainer" style="display: none;" class="mt-6">
+<h4 class="text-lg font-semibold mb-3">Datasheet Status</h4>
+<div class="analysis-section">
+<div class="flex items-center gap-4">
+<svg class="w-12 h-12" viewBox="0 0 24 24" fill="var(--primary-color)">
+<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"></path>
+<polyline points="14,2 14,8 20,8" fill="none" stroke="white" stroke-width="2"></polyline>
+<line x1="16" y1="13" x2="8" y2="13" stroke="white" stroke-width="2"></line>
+<line x1="16" y1="17" x2="8" y2="17" stroke="white" stroke-width="2"></line>
+</svg>
+<div>
+<p class="font-semibold text-lg" style="color: var(--primary-color);">✓ Material Datasheet Uploaded</p>
+<p class="text-sm text-dim">The datasheet will be automatically appended to your final PDF report.</p>
+<p class="text-sm text-dim mt-2" id="datasheetFileName"></p>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<div id="materialProperties" class="mt-6">
+<!-- Material properties will be displayed here -->
+</div>
+</div>
+
+<!-- Part Analysis Section -->
+<div class="analysis-section mt-6">
+<h3 class="text-xl font-semibold mb-4">Part Analysis</h3>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+<div>
+<label class="label">Analysis Approach</label>
+<select id="analysisApproach" class="input-field">
+<option value="full_part">Full Part Analysis</option>
+<option value="section">Section Analysis (for large parts)</option>
+<option value="comparison">Comparison Study</option>
+</select>
+</div>
+<div>
+<label class="label">Section Dimensions (if applicable)</label>
+<input type="text" id="sectionDimensions" class="input-field" placeholder="e.g., 2349x354x450mm">
+</div>
+</div>
+
+<div class="mt-4">
+<label class="label">Analysis Notes</label>
+<div class="editor-toolbar">
+<button class="editor-btn" onclick="formatText('bold', 'analysisNotes')" title="Bold">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+<path d="M13.5 15.5H10V12.5H13.5A1.5 1.5 0 0 1 15 14A1.5 1.5 0 0 1 13.5 15.5M10 6.5H13A1.5 1.5 0 0 1 14.5 8A1.5 1.5 0 0 1 13 9.5H10M15.6 10.79C16.57 10.11 17.25 9.02 17.25 8C17.25 5.74 15.5 4 13.25 4H7V18H14.04C16.14 18 17.75 16.3 17.75 14.21C17.75 12.69 16.89 11.39 15.6 10.79Z"/>
+</svg>
+</button>
+<button class="editor-btn" onclick="formatText('italic', 'analysisNotes')" title="Italic">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+<path d="M10 4V7H12.21L8.79 15H6V18H14V15H11.79L15.21 7H18V4H10Z"/>
+</svg>
+</button>
+<button class="editor-btn" onclick="formatText('underline', 'analysisNotes')" title="Underline">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+<path d="M5 21H19V19H5V21M12 17A6 6 0 0 0 18 11V3H15.5V11A3.5 3.5 0 0 1 12 14.5A3.5 3.5 0 0 1 8.5 11V3H6V11A6 6 0 0 0 12 17Z"/>
+</svg>
+</button>
+<div class="editor-separator"></div>
+<select class="editor-dropdown" onchange="formatText(this.value, 'analysisNotes'); this.value='';">
+<option value="">Heading</option>
+<option value="h1">Heading 1</option>
+<option value="h2">Heading 2</option>
+<option value="h3">Heading 3</option>
+</select>
+<div class="editor-separator"></div>
+<button class="editor-btn" onclick="formatText('bullet', 'analysisNotes')" title="Bullet List">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+<path d="M7 5H21V7H7V5M7 13V11H21V13H7M4 4.5A1.5 1.5 0 0 1 5.5 6A1.5 1.5 0 0 1 4 7.5A1.5 1.5 0 0 1 2.5 6A1.5 1.5 0 0 1 4 4.5M4 10.5A1.5 1.5 0 0 1 5.5 12A1.5 1.5 0 0 1 4 13.5A1.5 1.5 0 0 1 2.5 12A1.5 1.5 0 0 1 4 10.5M7 19V17H21V19H7M4 16.5A1.5 1.5 0 0 1 5.5 18A1.5 1.5 0 0 1 4 19.5A1.5 1.5 0 0 1 2.5 18A1.5 1.5 0 0 1 4 16.5Z"/>
+</svg>
+</button>
+<button class="editor-btn" onclick="formatText('number', 'analysisNotes')" title="Numbered List">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+<path d="M7 13V11H21V13H7M7 19V17H21V19H7M7 7V5H21V7H7M3 8V5H2V4H4V8H3M2 17V16H5V20H2V19H4V18.5H3V17.5H4V17H2M4.25 10A.75.75 0 0 1 5 10.75C5 10.95 4.92 11.14 4.79 11.27L3.12 13H5V14H2V13.08L4 11H2V10H4.25Z"/>
+</svg>
+</button>
+<div class="editor-separator"></div>
+<button class="editor-btn" onclick="formatText('quote', 'analysisNotes')" title="Quote">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+<path d="M14 17H17L19 13V7H13V13H16M6 17H9L11 13V7H5V13H8L6 17Z"/>
+</svg>
+</button>
+</div>
+<div id="analysisNotes" class="rich-text-editor" contenteditable="true" 
+     data-placeholder="Detail your analysis approach, key considerations, and rationale for material/process selection..."></div>
+</div>
+
+<!-- Key Metrics -->
+<div class="metric-grid mt-6">
+<div class="metric-card">
+<h4 class="font-semibold mb-2" style="color: var(--primary-color);">Estimated Weight</h4>
+<div class="flex items-center gap-4">
+<input type="number" id="estimatedWeight" class="input-field" placeholder="kg" step="0.1">
+<span class="text-dim">kg</span>
+</div>
+</div>
+<div class="metric-card">
+<h4 class="font-semibold mb-2" style="color: var(--primary-color);">Print Time</h4>
+<div class="flex items-center gap-4">
+<input type="number" id="printTime" class="input-field" placeholder="hours" step="0.5">
+<span class="text-dim">hours</span>
+</div>
+</div>
+<div class="metric-card">
+<h4 class="font-semibold mb-2" style="color: var(--primary-color);">Support Material</h4>
+<div class="flex items-center gap-4">
+<input type="number" id="supportMaterial" class="input-field" placeholder="%" value="15" max="100">
+<span class="text-dim">%</span>
+</div>
+</div>
+<div class="metric-card">
+<h4 class="font-semibold mb-2" style="color: var(--primary-color);">Waste Factor</h4>
+<div class="flex items-center gap-4">
+<input type="number" id="wasteFactor" class="input-field" placeholder="%" value="20" max="100">
+<span class="text-dim">%</span>
+</div>
+</div>
+</div>
+</div>
+
+<div class="flex justify-between mt-8">
+<button class="button" style="background: rgba(167, 78, 158, 0.2); max-width: 200px;" onclick="switchView('overview')">
+<svg class="btn-icon" viewBox="0 0 24 24">
+<path d="m15 18-6-6 6-6"></path>
+</svg>
+Back to Overview
+</button>
+<button class="button" style="max-width: 200px;" onclick="switchView('manufacturing')">
+<svg class="btn-icon" viewBox="0 0 24 24">
+<path d="m9 18 6-6-6-6"></path>
+</svg>
+Continue to Manufacturing
+</button>
+</div>
+</div>
+
+<!-- Manufacturing View -->
+<div id="view-manufacturing" class="hidden">
+<h2 class="text-2xl font-bold mb-6" style="color: var(--primary-color);">Manufacturing Process</h2>
+
+<div class="manufacturing-process">
+<h3 class="text-xl font-semibold mb-4">Process Selection</h3>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+<div>
+<label class="label">Manufacturing Process</label>
+<select id="manufacturingProcess" class="input-field">
+<option value="fdm">FDM/FFF 3D Printing</option>
+<option value="sls">SLS 3D Printing</option>
+<option value="dmls">DMLS (Metal)</option>
+<option value="hybrid">Hybrid (3D Print + Machining)</option>
+<option value="composite">3D Print + Composite Overlay</option>
+</select>
+</div>
+<div>
+<label class="label">Post-Processing Required</label>
+<select id="postProcessing" class="input-field" multiple>
+<option value="support_removal">Support Removal</option>
+<option value="machining">CNC Machining</option>
+<option value="sanding">Sanding/Finishing</option>
+<option value="painting">Painting/Coating</option>
+<option value="assembly">Assembly</option>
+<option value="testing">Testing/QC</option>
+</select>
+</div>
+</div>
+</div>
+
+<!-- Cost Breakdown -->
+<div class="cost-breakdown mt-6">
+<h3 class="text-xl font-semibold mb-4">Cost Analysis</h3>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+<div>
+<h4 class="font-semibold mb-3">Material Costs</h4>
+<div class="space-y-3">
+<div class="flex justify-between">
+<span>Base Material:</span>
+<span id="baseMaterialCost">£0</span>
+</div>
+<div class="flex justify-between">
+<span>Support Material:</span>
+<span id="supportMaterialCost">£0</span>
+</div>
+<div class="flex justify-between">
+<span>Waste Allowance:</span>
+<span id="wasteCost">£0</span>
+</div>
+<div class="flex justify-between font-semibold border-t pt-2">
+<span>Total Material:</span>
+<span id="totalMaterialCost">£0</span>
+</div>
+</div>
+</div>
+
+<div>
+<h4 class="font-semibold mb-3">Processing Costs</h4>
+<div class="space-y-3">
+<div class="flex justify-between">
+<span>Print Time:</span>
+<input type="number" id="hourlyRate" class="w-20 px-2 py-1 text-right input-field" value="50" min="1">
+<span>£/hr</span>
+</div>
+<div class="flex justify-between">
+<span>Post-Processing:</span>
+<input type="number" id="postProcessingCost" class="w-20 px-2 py-1 text-right input-field" value="100" min="0">
+<span>£</span>
+</div>
+<div class="flex justify-between">
+<span>Setup & Handling:</span>
+<input type="number" id="setupCost" class="w-20 px-2 py-1 text-right input-field" value="50" min="0">
+<span>£</span>
+</div>
+<div class="flex justify-between font-semibold border-t pt-2">
+<span>Total Processing:</span>
+<span id="totalProcessingCost">£0</span>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Total Cost Summary -->
+<div class="bg-gray-800 p-4 rounded-lg mt-4">
+<div class="flex justify-between text-xl font-bold">
+<span>Total Project Cost:</span>
+<span id="totalProjectCost" style="color: var(--primary-color);">£0</span>
+</div>
+</div>
+</div>
+
+<!-- Recommendations -->
+<h2>Recommendations & Conclusions</h2>
+<div class="analysis-section mt-6">
+<h3 class="text-xl font-semibold mb-4">Project Recommendations</h3>
+<div class="mt-4">
+<label class="label">Key Findings & Recommendations</label>
+<div class="editor-toolbar">
+<button class="editor-btn" onclick="formatText('bold', 'keyFindings')" title="Bold">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+<path d="M13.5 15.5H10V12.5H13.5A1.5 1.5 0 0 1 15 14A1.5 1.5 0 0 1 13.5 15.5M10 6.5H13A1.5 1.5 0 0 1 14.5 8A1.5 1.5 0 0 1 13 9.5H10M15.6 10.79C16.57 10.11 17.25 9.02 17.25 8C17.25 5.74 15.5 4 13.25 4H7V18H14.04C16.14 18 17.75 16.3 17.75 14.21C17.75 12.69 16.89 11.39 15.6 10.79Z"/>
+</svg>
+</button>
+<button class="editor-btn" onclick="formatText('italic', 'keyFindings')" title="Italic">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+<path d="M10 4V7H12.21L8.79 15H6V18H14V15H11.79L15.21 7H18V4H10Z"/>
+</svg>
+</button>
+<button class="editor-btn" onclick="formatText('underline', 'keyFindings')" title="Underline">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+<path d="M5 21H19V19H5V21M12 17A6 6 0 0 0 18 11V3H15.5V11A3.5 3.5 0 0 1 12 14.5A3.5 3.5 0 0 1 8.5 11V3H6V11A6 6 0 0 0 12 17Z"/>
+</svg>
+</button>
+<div class="editor-separator"></div>
+<select class="editor-dropdown" onchange="formatText(this.value, 'keyFindings'); this.value='';">
+<option value="">Heading</option>
+<option value="h1">Heading 1</option>
+<option value="h2">Heading 2</option>
+<option value="h3">Heading 3</option>
+</select>
+<div class="editor-separator"></div>
+<button class="editor-btn" onclick="formatText('bullet', 'keyFindings')" title="Bullet List">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+<path d="M7 5H21V7H7V5M7 13V11H21V13H7M4 4.5A1.5 1.5 0 0 1 5.5 6A1.5 1.5 0 0 1 4 7.5A1.5 1.5 0 0 1 2.5 6A1.5 1.5 0 0 1 4 4.5M4 10.5A1.5 1.5 0 0 1 5.5 12A1.5 1.5 0 0 1 4 13.5A1.5 1.5 0 0 1 2.5 12A1.5 1.5 0 0 1 4 10.5M7 19V17H21V19H7M4 16.5A1.5 1.5 0 0 1 5.5 18A1.5 1.5 0 0 1 4 19.5A1.5 1.5 0 0 1 2.5 18A1.5 1.5 0 0 1 4 16.5Z"/>
+</svg>
+</button>
+<button class="editor-btn" onclick="formatText('number', 'keyFindings')" title="Numbered List">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+<path d="M7 13V11H21V13H7M7 19V17H21V19H7M7 7V5H21V7H7M3 8V5H2V4H4V8H3M2 17V16H5V20H2V19H4V18.5H3V17.5H4V17H2M4.25 10A.75.75 0 0 1 5 10.75C5 10.95 4.92 11.14 4.79 11.27L3.12 13H5V14H2V13.08L4 11H2V10H4.25Z"/>
+</svg>
+</button>
+<div class="editor-separator"></div>
+<button class="editor-btn" onclick="formatText('quote', 'keyFindings')" title="Quote">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+<path d="M14 17H17L19 13V7H13V13H16M6 17H9L11 13V7H5V13H8L6 17Z"/>
+</svg>
+</button>
+<button class="editor-btn" onclick="formatText('clear', 'keyFindings')" title="Clear Formatting">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+<path d="M6 5V5.18L8.82 8H11.22L10.5 9.68L12.6 11.78L14.21 8H20V5H6M3.27 5L2 6.27L8.97 13.24L6.5 19H9.5L11.07 15.34L16.73 21L18 19.73L3.55 5.27L3.27 5Z"/>
+</svg>
+</button>
+</div>
+<div id="keyFindings" class="rich-text-editor" contenteditable="true" 
+     data-placeholder="Summarize your key findings, recommendations, and conclusions for this part analysis..."></div>
+</div>
+<div class="mt-4">
+<label class="label">Manufacturing Advantages</label>
+<div class="editor-toolbar">
+<button class="editor-btn" onclick="formatText('bold', 'manufacturingAdvantages')" title="Bold">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+<path d="M13.5 15.5H10V12.5H13.5A1.5 1.5 0 0 1 15 14A1.5 1.5 0 0 1 13.5 15.5M10 6.5H13A1.5 1.5 0 0 1 14.5 8A1.5 1.5 0 0 1 13 9.5H10M15.6 10.79C16.57 10.11 17.25 9.02 17.25 8C17.25 5.74 15.5 4 13.25 4H7V18H14.04C16.14 18 17.75 16.3 17.75 14.21C17.75 12.69 16.89 11.39 15.6 10.79Z"/>
+</svg>
+</button>
+<button class="editor-btn" onclick="formatText('italic', 'manufacturingAdvantages')" title="Italic">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+<path d="M10 4V7H12.21L8.79 15H6V18H14V15H11.79L15.21 7H18V4H10Z"/>
+</svg>
+</button>
+<button class="editor-btn" onclick="formatText('bullet', 'manufacturingAdvantages')" title="Bullet List">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+<path d="M7 5H21V7H7V5M7 13V11H21V13H7M4 4.5A1.5 1.5 0 0 1 5.5 6A1.5 1.5 0 0 1 4 7.5A1.5 1.5 0 0 1 2.5 6A1.5 1.5 0 0 1 4 4.5M4 10.5A1.5 1.5 0 0 1 5.5 12A1.5 1.5 0 0 1 4 13.5A1.5 1.5 0 0 1 2.5 12A1.5 1.5 0 0 1 4 10.5M7 19V17H21V19H7M4 16.5A1.5 1.5 0 0 1 5.5 18A1.5 1.5 0 0 1 4 19.5A1.5 1.5 0 0 1 2.5 18A1.5 1.5 0 0 1 4 16.5Z"/>
+</svg>
+</button>
+<button class="editor-btn" onclick="formatText('number', 'manufacturingAdvantages')" title="Numbered List">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+<path d="M7 13V11H21V13H7M7 19V17H21V19H7M7 7V5H21V7H7M3 8V5H2V4H4V8H3M2 17V16H5V20H2V19H4V18.5H3V17.5H4V17H2M4.25 10A.75.75 0 0 1 5 10.75C5 10.95 4.92 11.14 4.79 11.27L3.12 13H5V14H2V13.08L4 11H2V10H4.25Z"/>
+</svg>
+</button>
+</div>
+<div id="manufacturingAdvantages" class="rich-text-editor" contenteditable="true" 
+     data-placeholder="List specific advantages of 3D printing for this part (cost savings, design freedom, etc.)..."></div>
+</div>
+<div class="mt-4">
+<label class="label">Next Steps</label>
+<div class="editor-toolbar">
+<button class="editor-btn" onclick="formatText('bold', 'nextSteps')" title="Bold">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+<path d="M13.5 15.5H10V12.5H13.5A1.5 1.5 0 0 1 15 14A1.5 1.5 0 0 1 13.5 15.5M10 6.5H13A1.5 1.5 0 0 1 14.5 8A1.5 1.5 0 0 1 13 9.5H10M15.6 10.79C16.57 10.11 17.25 9.02 17.25 8C17.25 5.74 15.5 4 13.25 4H7V18H14.04C16.14 18 17.75 16.3 17.75 14.21C17.75 12.69 16.89 11.39 15.6 10.79Z"/>
+</svg>
+</button>
+<button class="editor-btn" onclick="formatText('italic', 'nextSteps')" title="Italic">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+<path d="M10 4V7H12.21L8.79 15H6V18H14V15H11.79L15.21 7H18V4H10Z"/>
+</svg>
+</button>
+<button class="editor-btn" onclick="formatText('bullet', 'nextSteps')" title="Bullet List">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+<path d="M7 5H21V7H7V5M7 13V11H21V13H7M4 4.5A1.5 1.5 0 0 1 5.5 6A1.5 1.5 0 0 1 4 7.5A1.5 1.5 0 0 1 2.5 6A1.5 1.5 0 0 1 4 4.5M4 10.5A1.5 1.5 0 0 1 5.5 12A1.5 1.5 0 0 1 4 13.5A1.5 1.5 0 0 1 2.5 12A1.5 1.5 0 0 1 4 10.5M7 19V17H21V19H7M4 16.5A1.5 1.5 0 0 1 5.5 18A1.5 1.5 0 0 1 4 19.5A1.5 1.5 0 0 1 2.5 18A1.5 1.5 0 0 1 4 16.5Z"/>
+</svg>
+</button>
+<button class="editor-btn" onclick="formatText('number', 'nextSteps')" title="Numbered List">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+<path d="M7 13V11H21V13H7M7 19V17H21V19H7M7 7V5H21V7H7M3 8V5H2V4H4V8H3M2 17V16H5V20H2V19H4V18.5H3V17.5H4V17H2M4.25 10A.75.75 0 0 1 5 10.75C5 10.95 4.92 11.14 4.79 11.27L3.12 13H5V14H2V13.08L4 11H2V10H4.25Z"/>
+</svg>
+</button>
+</div>
+<div id="nextSteps" class="rich-text-editor" contenteditable="true" 
+     data-placeholder="Recommended next steps for the client (prototype, testing, production planning, etc.)..."></div>
+</div>
+</div>
+
+<!-- Timeline -->
+<div class="analysis-section mt-6">
+<h3 class="text-xl font-semibold mb-4">Production Timeline</h3>
+
+<div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+<div>
+<label class="label">Print Duration</label>
+<div class="flex items-center gap-2">
+<span id="calculatedPrintTime">0</span>
+<span class="text-dim">hours</span>
+</div>
+</div>
+<div>
+<label class="label">Post-Processing</label>
+<input type="number" id="postProcessingTime" class="input-field" value="8" min="0">
+<span class="text-sm text-dim">hours</span>
+</div>
+<div>
+<label class="label">Assembly/Finishing</label>
+<input type="number" id="finishingTime" class="input-field" value="4" min="0">
+<span class="text-sm text-dim">hours</span>
+</div>
+<div>
+<label class="label">Total Lead Time</label>
+<div class="flex items-center gap-2">
+<span id="totalLeadTime" class="text-xl font-bold" style="color: var(--primary-color);">0</span>
+<span class="text-dim">days</span>
+</div>
+</div>
+</div>
+</div>
+
+<div class="flex justify-between mt-8">
+<button class="button" style="background: rgba(167, 78, 158, 0.2); max-width: 200px;" onclick="switchView('analysis')">
+<svg class="btn-icon" viewBox="0 0 24 24">
+<path d="m15 18-6-6 6-6"></path>
+</svg>
+Back to Analysis
+</button>
+<button class="button" style="max-width: 200px;" onclick="switchView('report')">
+<svg class="btn-icon" viewBox="0 0 24 24">
+<path d="m9 18 6-6-6-6"></path>
+</svg>
+Generate Report
+</button>
+</div>
+</div>
+
+<!-- Report View -->
+<div id="view-report" class="hidden">
+<h2 class="text-2xl font-bold mb-6" style="color: var(--primary-color);">Part Analysis Report</h2>
+
+<div class="flex justify-end mb-4 space-x-2">
+<button id="exportPDF" class="button" style="max-width: 150px;">
+<svg class="btn-icon" viewBox="0 0 24 24">
+<path d="M4 16v1a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-1m-4-4-4 4m0 0-4-4m4 4V4"></path>
+</svg>
+Export PDF
+</button>
+<button onclick="window.print()" class="button" style="max-width: 100px;">
+<svg class="btn-icon" viewBox="0 0 24 24">
+<path d="M17 17h2a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h2m2 4h6a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2zm8-12V5a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v4h10z"></path>
+</svg>
+Print
+</button>
+</div>
+
+<div id="reportContent" class="card">
+<!-- Report content will be generated here -->
+</div>
+
+<div class="flex justify-center mt-8">
+<button class="button" style="background: rgba(167, 78, 158, 0.2); max-width: 200px;" onclick="switchView('manufacturing')">
+<svg class="btn-icon" viewBox="0 0 24 24">
+<path d="m15 18-6-6 6-6"></path>
+</svg>
+Back to Manufacturing
+</button>
+</div>
+</div>
+</div>
+</div>
+
+<script>
+// Application state
+const appState = {
+currentView: 'overview',
+partData: {
+clientName: '',
+projectRef: '',
+partDescription: '',
+partDimensions: '',
+currentMethod: 'moulding',
+analysisPurpose: 'cost_reduction'
+},
+analysisData: {
+materialType: 'pc_cf',
+materialCost: 25,
+analysisApproach: 'full_part',
+sectionDimensions: '',
+analysisNotes: '',
+estimatedWeight: 0,
+printTime: 0,
+supportMaterial: 15,
+wasteFactor: 20
+},
+manufacturingData: {
+process: 'fdm',
+postProcessing: [],
+hourlyRate: 50,
+postProcessingCost: 100,
+setupCost: 50,
+postProcessingTime: 8,
+finishingTime: 4
+},
+uploadedFiles: {
+modelFile: null,
+referenceImages: [],
+materialDatasheet: null
+},
+viewers: {
+modelScene: null,
+modelRenderer: null,
+modelCamera: null,
+modelControls: null,
+modelAnimationId: null
+},
+editorContents: {
+partDescription: '',
+analysisNotes: '',
+customMaterialNotes: '',
+keyFindings: '',
+manufacturingAdvantages: '',
+nextSteps: ''
+}
+};
+
+// Make appState globally available
+window.appState = appState;
+
+// Format text function for rich text editing
+function formatText(format, editorId) {
+const editor = document.getElementById(editorId);
+if (!editor || !editor.isContentEditable) return;
+
+// Focus the editor
+editor.focus();
+
+// Store current selection
+const selection = window.getSelection();
+let range = null;
+if (selection.rangeCount > 0) {
+range = selection.getRangeAt(0);
+}
+
+switch(format) {
+case 'bold':
+document.execCommand('bold', false, null);
+break;
+case 'italic':
+document.execCommand('italic', false, null);
+break;
+case 'underline':
+document.execCommand('underline', false, null);
+break;
+case 'strikethrough':
+document.execCommand('strikeThrough', false, null);
+break;
+case 'h1':
+document.execCommand('formatBlock', false, 'h1');
+break;
+case 'h2':
+document.execCommand('formatBlock', false, 'h2');
+break;
+case 'h3':
+document.execCommand('formatBlock', false, 'h3');
+break;
+case 'bullet':
+document.execCommand('insertUnorderedList', false, null);
+// Force proper list styling
+setTimeout(() => {
+const lists = editor.querySelectorAll('ul');
+lists.forEach(list => {
+list.style.listStyleType = 'disc';
+list.style.listStylePosition = 'outside';
+list.style.marginLeft = '30px';
+list.style.paddingLeft = '0';
+const items = list.querySelectorAll('li');
+items.forEach(item => {
+item.style.display = 'list-item';
+});
+});
+}, 10);
+break;
+case 'number':
+document.execCommand('insertOrderedList', false, null);
+// Force proper list styling
+setTimeout(() => {
+const lists = editor.querySelectorAll('ol');
+lists.forEach(list => {
+list.style.listStyleType = 'decimal';
+list.style.listStylePosition = 'outside';
+list.style.marginLeft = '30px';
+list.style.paddingLeft = '0';
+const items = list.querySelectorAll('li');
+items.forEach(item => {
+item.style.display = 'list-item';
+});
+});
+}, 10);
+break;
+case 'quote':
+document.execCommand('formatBlock', false, 'blockquote');
+break;
+case 'code':
+// For inline code, wrap selection in code tags
+if (selection.rangeCount > 0) {
+const range = selection.getRangeAt(0);
+const selectedText = range.toString();
+if (selectedText) {
+document.execCommand('insertHTML', false, `<code>${selectedText}</code>`);
+} else {
+document.execCommand('insertHTML', false, '<code>code</code>');
+}
+}
+break;
+case 'link':
+const url = prompt('Enter URL:', 'https://');
+if (url) {
+document.execCommand('createLink', false, url);
+}
+break;
+case 'clear':
+document.execCommand('removeFormat', false, null);
+break;
+}
+
+// Save content after formatting
+saveEditorContent(editorId);
+}
+
+// Save editor content
+function saveEditorContent(editorId) {
+const editor = document.getElementById(editorId);
+if (editor && editor.isContentEditable) {
+appState.editorContents[editorId] = editor.innerHTML;
+}
+}
+
+// Get editor content as plain text
+function getEditorContent(editorId) {
+const editor = document.getElementById(editorId);
+if (editor && editor.isContentEditable) {
+return editor.innerText || '';
+}
+return '';
+}
+
+// Get editor content as HTML
+function getEditorHTML(editorId) {
+const editor = document.getElementById(editorId);
+if (editor && editor.isContentEditable) {
+return editor.innerHTML || '';
+}
+return '';
+}
+
+// View switching
+function switchView(view) {
+// Hide all views
+const views = ['overview', 'analysis', 'manufacturing', 'report'];
+views.forEach(v => {
+document.getElementById(`view-${v}`).classList.add('hidden');
+document.getElementById(`tab-${v}`).classList.remove('active-tab');
+});
+
+// Show selected view
+document.getElementById(`view-${view}`).classList.remove('hidden');
+document.getElementById(`tab-${view}`).classList.add('active-tab');
+
+// Update step indicator
+updateStepIndicator(view);
+
+// Update state
+appState.currentView = view;
+
+// Generate report if switching to report view
+if (view === 'report') {
+generateReport();
+}
+
+// Update calculations if switching to manufacturing
+if (view === 'manufacturing') {
+updateCalculations();
+}
+}
+
+// Step indicator updates
+function updateStepIndicator(currentView) {
+const steps = ['overview', 'analysis', 'manufacturing', 'report'];
+const stepElements = ['step-overview', 'step-analysis', 'step-manufacturing', 'step-report'];
+
+stepElements.forEach((stepId, index) => {
+const stepElement = document.getElementById(stepId);
+const stepView = steps[index];
+
+stepElement.classList.remove('active', 'completed');
+
+if (stepView === currentView) {
+stepElement.classList.add('active');
+} else if (steps.indexOf(stepView) < steps.indexOf(currentView)) {
+stepElement.classList.add('completed');
+}
+});
+}
+
+// Toggle custom material fields
+function toggleCustomMaterial() {
+const materialTypeSelect = document.getElementById('materialType');
+const customFields = document.getElementById('customMaterialFields');
+
+if (!materialTypeSelect || !customFields) {
+return;
+}
+
+const materialType = materialTypeSelect.value;
+
+if (materialType === 'custom') {
+customFields.style.display = 'block';
+} else {
+customFields.style.display = 'none';
+}
+updateMaterialProperties();
+}
+
+// Toggle other manufacturing method field
+function toggleOtherMethod() {
+const methodSelect = document.getElementById('currentMethod');
+const otherField = document.getElementById('otherMethodField');
+
+if (!methodSelect || !otherField) {
+console.warn('Manufacturing method elements not found');
+return;
+}
+
+if (methodSelect.value === 'other') {
+otherField.style.display = 'block';
+} else {
+otherField.style.display = 'none';
+}
+}
+
+// Get current manufacturing method with custom text
+function getCurrentManufacturingMethod() {
+const methodSelect = document.getElementById('currentMethod');
+if (!methodSelect) {
+return 'Not specified';
+}
+
+const method = methodSelect.value;
+if (method === 'other') {
+const customTextElement = document.getElementById('otherMethodText');
+const customText = customTextElement ? customTextElement.value : '';
+return customText || 'Other (not specified)';
+}
+
+const methodNames = {
+'moulding': 'Traditional Moulding',
+'machining': 'CNC Machining', 
+'composite': 'Composite Layup'
+};
+return methodNames[method] || method;
+}
+
+// File upload handlers
+function setupFileUploads() {
+// Model file upload
+setupFileUpload('modelUploadArea', 'modelFile', 'modelFileList', handleModelFile);
+// Reference images upload  
+setupFileUpload('imagesUploadArea', 'referenceImages', 'referenceImagesList', handleReferenceImages);
+// Material datasheet upload
+setupFileUpload('datasheetUploadArea', 'materialDatasheet', 'datasheetFileList', handleDatasheet);
+}
+
+function setupFileUpload(areaId, inputId, listId, handler) {
+const area = document.getElementById(areaId);
+const input = document.getElementById(inputId);
+const list = document.getElementById(listId);
+
+area.addEventListener('click', () => input.click());
+area.addEventListener('dragover', (e) => {
+e.preventDefault();
+area.classList.add('dragover');
+});
+area.addEventListener('dragleave', () => {
+area.classList.remove('dragover');
+});
+area.addEventListener('drop', (e) => {
+e.preventDefault();
+area.classList.remove('dragover');
+const files = e.dataTransfer.files;
+if (files.length) {
+input.files = files;
+handler(files, list);
+}
+});
+input.addEventListener('change', (e) => handler(e.target.files, list));
+}
+
+function handleModelFile(files, listElement) {
+listElement.innerHTML = '';
+Array.from(files).forEach(file => {
+// Only accept STL files
+if (!file.name.toLowerCase().endsWith('.stl')) {
+alert('Only STL files are supported for 3D model upload. Please convert your file to STL format.');
+return;
+}
+
+const fileItem = createFileItem(file, 'model');
+listElement.appendChild(fileItem);
+appState.uploadedFiles.modelFile = file;
+
+// Show 3D viewer for STL files
+document.getElementById('modelViewerContainer').style.display = 'block';
+load3DModel(file);
+
+// Show STL file info
+const stlInfo = document.createElement('div');
+stlInfo.className = 'analysis-section mt-4';
+stlInfo.innerHTML = `
+<h4 class="font-semibold mb-2" style="color: var(--primary-color);">STL File Analysis</h4>
+<div class="grid grid-cols-2 gap-4">
+<div>
+<p><strong>File Name:</strong> ${file.name}</p>
+<p><strong>File Size:</strong> ${(file.size / 1024).toFixed(1)} KB</p>
+<p><strong>File Type:</strong> STL Mesh Model</p>
+</div>
+<div>
+<p><strong>Status:</strong> <span style="color: #28a745;">Uploaded Successfully</span></p>
+<p><strong>Use:</strong> 3D printing and slicing preparation</p>
+</div>
+</div>
+<p class="mt-2 text-sm text-dim">STL file contains mesh geometry ready for 3D printing analysis and time/cost estimation.</p>
+`;
+listElement.appendChild(stlInfo);
+});
+}
+
+function handleReferenceImages(files, listElement) {
+Array.from(files).forEach(file => {
+const fileItem = createFileItem(file, 'image');
+listElement.appendChild(fileItem);
+appState.uploadedFiles.referenceImages.push(file);
+});
+}
+
+function handleDatasheet(files, listElement) {
+listElement.innerHTML = '';
+Array.from(files).forEach(file => {
+const fileItem = createFileItem(file, 'datasheet');
+listElement.appendChild(fileItem);
+appState.uploadedFiles.materialDatasheet = file;
+
+// Show PDF viewer for PDF files
+if (file.type === 'application/pdf') {
+document.getElementById('pdfViewerContainer').style.display = 'block';
+displayPDF(file);
+}
+});
+}
+
+function createFileItem(file, type) {
+const fileItem = document.createElement('div');
+fileItem.className = 'file-item';
+
+const iconSvg = getFileIcon(file.type);
+const fileSize = (file.size / 1024).toFixed(1);
+const fileUnit = file.size > 1024 * 1024 ? 'MB' : 'KB';
+const displaySize = file.size > 1024 * 1024 ? (file.size / (1024 * 1024)).toFixed(1) : fileSize;
+
+fileItem.innerHTML = `
+<div class="file-info">
+<div class="file-icon">${iconSvg}</div>
+<div>
+<div class="font-medium text-sm">${file.name}</div>
+<div class="text-xs text-dim">${displaySize} ${fileUnit} • ${file.type || 'Unknown'}</div>
+</div>
+</div>
+<button class="remove-btn" onclick="removeFile(this, '${type}', '${file.name}')">Remove</button>
+`;
+
+// If it's an image, create preview
+if (file.type.startsWith('image/')) {
+const reader = new FileReader();
+reader.onload = (e) => {
+const preview = document.createElement('div');
+preview.className = 'image-item';
+preview.innerHTML = `
+<div class="image-container">
+<img src="${e.target.result}" alt="${file.name}">
+</div>
+<div class="p-3">
+<p class="font-medium text-sm truncate">${file.name}</p>
+<p class="text-xs text-dim">${displaySize} ${fileUnit}</p>
+</div>
+`;
+document.getElementById('uploadedFiles').appendChild(preview);
+};
+reader.readAsDataURL(file);
+}
+
+return fileItem;
+}
+
+function getFileIcon(fileType) {
+if (fileType.startsWith('image/')) {
+return `<svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h16v16H4V4zm2 2v12h12V6H6zm2 10l2-3 3 4h6l-3-4-2 2.5L8 16z"/></svg>`;
+} else if (fileType === 'application/pdf') {
+return `<svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/></svg>`;
+} else {
+return `<svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/></svg>`;
+}
+}
+
+function generateImageGalleryForPDF() {
+const uploadedImages = document.querySelectorAll('#uploadedFiles .image-item img');
+
+if (!uploadedImages.length) {
+return '<p style="color: #666;">No images uploaded</p>';
+}
+
+let galleryHTML = '<div class="image-grid">';
+
+uploadedImages.forEach((img, index) => {
+galleryHTML += `
+<div class="image-item-pdf">
+<img src="${img.src}" alt="${img.alt || 'Part Image ' + (index + 1)}" style="width: 100%; height: 200px; object-fit: contain;">
+<div class="image-caption">
+<strong>${img.alt || 'Part Image ' + (index + 1)}</strong>
+</div>
+</div>
+`;
+});
+
+galleryHTML += '</div>';
+return galleryHTML;
+}
+
+function generate3DModelSnapshotForPDF(snapshotDataURL) {
+return `
+<div style="background: rgba(167, 78, 158, 0.1); border: 2px solid #a74e9e; border-radius: 8px; padding: 20px; margin: 20px 0; page-break-inside: avoid;">
+<h3 style="margin-top: 0; color: #a74e9e;">3D Model Preview</h3>
+<div style="text-align: center; margin: 20px 0;">
+<img src="${snapshotDataURL}" alt="3D Model Preview" style="max-width: 100%; height: auto; border: 1px solid #a74e9e; border-radius: 8px;">
+</div>
+<p style="text-align: center; font-style: italic; color: #666;">3D model rendered from uploaded STL file</p>
+</div>
+`;
+}
+
+function generate3DModelPreviewForPDF() {
+if (appState.uploadedFiles.modelFile) {
+const fileName = appState.uploadedFiles.modelFile.name;
+const fileSize = (appState.uploadedFiles.modelFile.size / (1024 * 1024)).toFixed(2);
+
+return `
+<div style="background: rgba(167, 78, 158, 0.1); border: 2px solid #a74e9e; border-radius: 8px; padding: 20px; margin: 20px 0; page-break-inside: avoid;">
+<h3 style="margin-top: 0; color: #a74e9e;">3D Model Information</h3>
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+<div>
+<p><strong>File Name:</strong> ${fileName}</p>
+<p><strong>File Size:</strong> ${fileSize} MB</p>
+<p><strong>File Type:</strong> ${fileName.toLowerCase().endsWith('.stl') ? 'STL Mesh' : 'CAD Model'}</p>
+</div>
+<div>
+<p><strong>Status:</strong> <span style="color: #28a745;">✓ Successfully Loaded</span></p>
+<p><strong>Usage:</strong> Manufacturing analysis & cost estimation</p>
+</div>
+</div>
+<p style="margin-top: 15px; font-style: italic; color: #666;">
+3D model has been analyzed and incorporated into the manufacturing calculations. 
+The model viewer is available in the interactive interface for detailed inspection.
+</p>
+</div>
+`;
+}
+return '';
+}
+
+// Generate datasheet section for PDF
+async function generateDatasheetSectionForPDF() {
+if (!appState.uploadedFiles.materialDatasheet) {
+return '';
+}
+
+return `
+<div style="page-break-before: always; page-break-inside: avoid;">
+<h2>Material Technical Datasheet</h2>
+<div class="highlight-box" style="background: #e8f4fd; border-left: 4px solid #a74e9e; padding: 20px; margin: 20px 0;">
+<div style="display: flex; align-items: center; gap: 20px;">
+<svg width="48" height="48" viewBox="0 0 24 24" fill="#a74e9e">
+<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"></path>
+<polyline points="14,2 14,8 20,8" fill="none" stroke="white" stroke-width="2"></polyline>
+<path d="M16 13H8M16 17H8" stroke="white" stroke-width="2"></path>
+</svg>
+<div>
+<h3 style="margin: 0 0 10px 0; color: #a74e9e;">Material Datasheet Attached</h3>
+<p style="margin: 0; font-size: 16px;"><strong>File:</strong> ${appState.uploadedFiles.materialDatasheet.name}</p>
+<p style="margin: 5px 0; color: #666;">Size: ${(appState.uploadedFiles.materialDatasheet.size / 1024).toFixed(1)} KB</p>
+<p style="margin: 10px 0 0 0; font-style: italic; color: #666;">
+The complete material technical datasheet has been appended to this report for your reference.
+Please see the attached pages following this analysis.
+</p>
+</div>
+</div>
+</div>
+</div>
+`;
+}
+
+function generateMaterialPropertiesForPDF() {
+const materialTypeSelect = document.getElementById('materialType');
+if (!materialTypeSelect) {
+return '';
+}
+
+const materialType = materialTypeSelect.value;
+
+if (materialType === 'custom') {
+const customNameElement = document.getElementById('customMaterialName');
+const customSupplierElement = document.getElementById('customMaterialSupplier');
+const customTensileElement = document.getElementById('customTensileStrength');
+const customDensityElement = document.getElementById('customDensity');
+
+const customName = customNameElement?.value;
+const customSupplier = customSupplierElement?.value;
+const customTensile = customTensileElement?.value;
+const customDensity = customDensityElement?.value;
+
+if (customName) {
+return `
+<div style="margin-top: 15px; padding: 15px; background: #f0f0f0; border-radius: 6px;">
+<h4 style="margin-top: 0; color: #a74e9e;">Custom Material Properties</h4>
+<p><strong>Supplier:</strong> ${customSupplier || 'Not specified'}</p>
+<p><strong>Tensile Strength:</strong> ${customTensile ? customTensile + ' MPa' : 'Not specified'}</p>
+<p><strong>Density:</strong> ${customDensity ? customDensity + ' g/cc' : 'Not specified'}</p>
+</div>
+`;
+}
+}
+
+// For standard materials, show key properties
+const materials = {
+'pc_cf': {
+'Tensile Strength': '132.4 MPa',
+'Density': '1.21 g/cc',
+'HDT': '144°C',
+'Fiber Content': '20% Carbon Fiber'
+},
+'abs_cf': {
+'Tensile Strength': '110 MPa', 
+'Density': '1.15 g/cc',
+'Print Temperature': '260°C'
+},
+'peek': {
+'Tensile Strength': '100 MPa',
+'Density': '1.31 g/cc',
+'Melting Point': '343°C'
+}
+};
+
+if (materials[materialType]) {
+const props = materials[materialType];
+let html = '<div style="margin-top: 15px; padding: 15px; background: #f0f0f0; border-radius: 6px;"><h4 style="margin-top: 0; color: #a74e9e;">Key Properties</h4>';
+Object.entries(props).forEach(([key, value]) => {
+html += `<p><strong>${key}:</strong> ${value}</p>`;
+});
+html += '</div>';
+return html;
+}
+
+return '';
+}
+
+function getMaterialName() {
+const materialTypeSelect = document.getElementById('materialType');
+if (!materialTypeSelect) {
+return 'Material not specified';
+}
+
+const materialType = materialTypeSelect.value;
+
+if (materialType === 'custom') {
+const customNameElement = document.getElementById('customMaterialName');
+return customNameElement?.value || 'Custom Material';
+}
+
+const materials = {
+'pc_cf': 'PC-Carbon Fiber (Dahltram C-250CF)',
+'abs_cf': 'ABS-Carbon Fiber',
+'peek': 'PEEK',
+'peek_cf': 'PEEK-Carbon Fiber', 
+'pei': 'PEI (Ultem)',
+'nylon_cf': 'Nylon-Carbon Fiber'
+};
+return materials[materialType] || 'Unknown Material';
+}
+
+function getPostProcessingList() {
+const select = document.getElementById('postProcessing');
+if (!select) {
+return 'None specified';
+}
+const selected = Array.from(select.selectedOptions).map(option => option.text);
+return selected.length ? selected.join(', ') : 'None specified';
+}
+
+// Enhanced PDF Export - Single Long Page Approach
+async function exportReportToPDF() {
+// Show loading indicator
+const loadingOverlay = document.createElement('div');
+loadingOverlay.className = 'pdf-loading-overlay';
+loadingOverlay.innerHTML = `
+<div class="pdf-spinner"></div>
+<p style="color: white; font-size: 18px; margin-top: 20px;">Generating professional PDF report...</p>
+<p style="color: white; font-size: 14px; margin-top: 10px;" id="pdfProgress">Creating single continuous page...</p>
+`;
+document.body.appendChild(loadingOverlay);
+
+setTimeout(async () => {
+try {
+// Generate report content first
+await generateReport();
+const reportContent = document.getElementById('reportContent');
+const projectRef = document.getElementById('projectRef').value || '3D_Print_Analysis';
+const safeFileName = projectRef.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+
+// Create PDF-optimized clone for single page layout
+const reportClone = reportContent.cloneNode(true);
+reportClone.style.cssText = `
+background: white !important;
+color: black !important;
+padding: 30px;
+font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+position: absolute;
+left: -9999px;
+width: 210mm;
+border-radius: 0;
+box-shadow: none;
+line-height: 1.6;
+min-height: auto;
+`;
+
+// Apply enhanced PDF styling - NO PAGE BREAKS
+const pdfStyles = document.createElement('style');
+pdfStyles.textContent = `
+.pdf-export * {
+page-break-inside: auto !important;
+page-break-before: auto !important;
+page-break-after: auto !important;
+-webkit-print-color-adjust: exact !important;
+print-color-adjust: exact !important;
+}
+.pdf-export h1 { 
+color: #a74e9e !important; 
+font-size: 28px !important; 
+margin-bottom: 10px !important; 
+font-weight: bold !important; 
+}
+.pdf-export h2 { 
+color: #a74e9e !important; 
+font-size: 22px !important; 
+margin: 30px 0 15px 0 !important; 
+border-bottom: 2px solid #a74e9e !important; 
+padding-bottom: 8px !important;
+}
+.pdf-export h3 { 
+color: #333 !important; 
+font-size: 18px !important; 
+margin: 20px 0 12px 0 !important;
+}
+.pdf-export h4 { 
+color: #a74e9e !important; 
+font-size: 16px !important; 
+margin: 15px 0 8px 0 !important;
+}
+.pdf-export table { 
+border-collapse: collapse !important; 
+width: 100% !important; 
+margin: 15px 0 !important;
+}
+.pdf-export th { 
+background: rgba(167, 78, 158, 0.15) !important; 
+color: #a74e9e !important; 
+padding: 12px !important; 
+border: 1px solid #a74e9e !important; 
+text-align: left !important; 
+font-weight: bold !important;
+font-size: 14px !important;
+}
+.pdf-export td { 
+padding: 10px !important; 
+border: 1px solid #a74e9e !important;
+font-size: 14px !important;
+}
+.pdf-export .total-cost { 
+background: #f0f8ff !important; 
+border: 3px solid #a74e9e !important; 
+border-radius: 8px !important; 
+padding: 20px !important; 
+margin: 25px 0 !important; 
+text-align: center !important;
+}
+.pdf-export .highlight-box, .pdf-export .analysis-section { 
+background: #e8f4fd !important; 
+border-left: 4px solid #a74e9e !important; 
+padding: 20px !important; 
+margin: 20px 0 !important;
+border-radius: 6px !important;
+}
+.pdf-export img { 
+max-width: 100% !important; 
+height: auto !important; 
+border: 1px solid #a74e9e !important; 
+border-radius: 6px !important; 
+margin: 10px 0 !important;
+}
+.pdf-export p { 
+margin: 10px 0 !important; 
+line-height: 1.6 !important; 
+}
+.pdf-export ul {
+list-style: none !important;
+margin: 10px 0 10px 20px !important;
+padding-left: 0 !important;
+}
+.pdf-export ol {
+list-style: none !important;
+margin: 10px 0 10px 20px !important;
+padding-left: 0 !important;
+}
+.pdf-export li {
+display: block !important;
+margin: 5px 0 !important;
+}
+.pdf-export .image-caption { 
+padding: 12px !important; 
+background: rgba(167, 78, 158, 0.1) !important; 
+font-size: 14px !important; 
+font-weight: bold !important;
+color: #a74e9e !important;
+border-top: 1px solid #a74e9e !important;
+}
+.pdf-export .cost-table th {
+background: rgba(167, 78, 158, 0.2) !important;
+}
+.pdf-export .cost-table tr:nth-child(even) {
+background: rgba(167, 78, 158, 0.05) !important;
+}
+`;
+
+reportClone.className = 'pdf-export';
+document.head.appendChild(pdfStyles);
+document.body.appendChild(reportClone);
+
+// Generate high-quality PDF as single continuous page
+html2canvas(reportClone, {
+scale: 1.5,
+backgroundColor: 'white',
+useCORS: true,
+allowTaint: true,
+logging: false,
+width: reportClone.scrollWidth,
+height: reportClone.scrollHeight,
+windowWidth: reportClone.scrollWidth,
+windowHeight: reportClone.scrollHeight,
+onclone: function(clonedDoc) {
+// Style all lists for better rendering
+const allLists = clonedDoc.querySelectorAll('ul, ol');
+allLists.forEach(list => {
+list.style.listStyle = 'none';
+list.style.paddingLeft = '0';
+list.style.marginLeft = '20px';
+});
+
+// Add bullets to unordered lists
+const ulItems = clonedDoc.querySelectorAll('ul > li');
+ulItems.forEach(item => {
+// Check if bullet already added
+if (!item.querySelector('.list-marker')) {
+const bullet = clonedDoc.createElement('span');
+bullet.className = 'list-marker';
+bullet.style.color = '#a74e9e';
+bullet.style.fontWeight = 'bold';
+bullet.style.marginRight = '8px';
+bullet.style.display = 'inline';
+bullet.textContent = '•';
+item.insertBefore(bullet, item.firstChild);
+}
+});
+
+// Add numbers to ordered lists
+const olLists = clonedDoc.querySelectorAll('ol');
+olLists.forEach(list => {
+const items = list.querySelectorAll(':scope > li');
+items.forEach((item, index) => {
+// Check if number already added
+if (!item.querySelector('.list-marker')) {
+const number = clonedDoc.createElement('span');
+number.className = 'list-marker';
+number.style.color = '#a74e9e';
+number.style.fontWeight = 'bold';
+number.style.marginRight = '8px';
+number.style.display = 'inline';
+number.textContent = (index + 1) + '.';
+item.insertBefore(number, item.firstChild);
+}
+});
+});
+
+// Ensure all images are loaded
+const images = clonedDoc.querySelectorAll('img');
+return Promise.all(Array.from(images).map(img => {
+if (img.complete) return Promise.resolve();
+return new Promise(resolve => {
+img.onload = resolve;
+img.onerror = resolve;
+});
+}));
+}
+}).then(async canvas => {
+// Clean up
+document.body.removeChild(reportClone);
+document.head.removeChild(pdfStyles);
+
+const { jsPDF } = window.jspdf;
+const imgWidth = 210; // A4 width in mm
+const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+// Create PDF with custom page size to fit all content
+const pdf = new jsPDF({
+orientation: 'portrait',
+unit: 'mm',
+format: [210, Math.max(297, imgHeight)] // Use A4 width, but height based on content
+});
+
+// Add the entire canvas as one image
+pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, imgWidth, imgHeight);
+
+// Update progress
+const progressElement = document.getElementById('pdfProgress');
+if (progressElement) {
+progressElement.textContent = 'Finalizing single-page PDF...';
+}
+
+// Get the report PDF as ArrayBuffer
+const reportPdfBytes = pdf.output('arraybuffer');
+
+// Check if there's a datasheet to append
+if (appState.uploadedFiles.materialDatasheet) {
+try {
+// Update progress
+const progressElement = document.getElementById('pdfProgress');
+if (progressElement) {
+progressElement.textContent = 'Appending material datasheet...';
+}
+
+// Read the datasheet file
+const datasheetArrayBuffer = await appState.uploadedFiles.materialDatasheet.arrayBuffer();
+
+// Load both PDFs using PDF-lib
+const reportPdf = await PDFLib.PDFDocument.load(reportPdfBytes);
+const datasheetPdf = await PDFLib.PDFDocument.load(datasheetArrayBuffer);
+
+// Copy all pages from the datasheet
+const datasheetPages = await reportPdf.copyPages(datasheetPdf, datasheetPdf.getPageIndices());
+
+// Add each datasheet page to the report
+datasheetPages.forEach((page) => {
+reportPdf.addPage(page);
+});
+
+// Save the merged PDF
+const mergedPdfBytes = await reportPdf.save();
+
+// Download the merged PDF
+const blob = new Blob([mergedPdfBytes], { type: 'application/pdf' });
+const url = URL.createObjectURL(blob);
+const link = document.createElement('a');
+link.href = url;
+link.download = `${safeFileName}_analysis_report_complete.pdf`;
+link.click();
+URL.revokeObjectURL(url);
+
+// Success message
+setTimeout(() => {
+document.body.removeChild(loadingOverlay);
+alert('PDF report generated successfully with material datasheet appended!');
+}, 500);
+} catch (error) {
+console.error('Error merging PDFs:', error);
+// Fall back to saving just the report
+pdf.save(`${safeFileName}_analysis_report.pdf`);
+document.body.removeChild(loadingOverlay);
+alert('Report generated but could not append datasheet. Error: ' + error.message);
+}
+} else {
+// No datasheet, save report as normal
+pdf.save(`${safeFileName}_analysis_report.pdf`);
+document.body.removeChild(loadingOverlay);
+}
+}).catch(error => {
+// Clean up on error
+if (document.body.contains(reportClone)) document.body.removeChild(reportClone);
+if (document.head.contains(pdfStyles)) document.head.removeChild(pdfStyles);
+document.body.removeChild(loadingOverlay);
+console.error('PDF generation error:', error);
+alert('Error generating PDF. Please try the print function instead.');
+});
+} catch (error) {
+document.body.removeChild(loadingOverlay);
+console.error('PDF setup error:', error);
+alert('Error setting up PDF generation.');
+}
+}, 500);
+}
+
+// JSON Export/Import Functions
+function exportProjectData() {
+// Collect all form data
+const formData = {
+version: "1.0.0",
+timestamp: new Date().toISOString(),
+currentView: appState.currentView,
+partData: {
+clientName: document.getElementById('clientName')?.value || '',
+projectRef: document.getElementById('projectRef')?.value || '',
+partDescription: getEditorHTML('partDescription') || '',
+partDimensions: document.getElementById('partDimensions')?.value || '',
+currentMethod: document.getElementById('currentMethod')?.value || 'moulding',
+otherMethodText: document.getElementById('otherMethodText')?.value || '',
+analysisPurpose: document.getElementById('analysisPurpose')?.value || 'cost_reduction'
+},
+analysisData: {
+materialType: document.getElementById('materialType')?.value || 'pc_cf',
+materialCost: document.getElementById('materialCost')?.value || '25',
+customMaterialName: document.getElementById('customMaterialName')?.value || '',
+customMaterialSupplier: document.getElementById('customMaterialSupplier')?.value || '',
+customTensileStrength: document.getElementById('customTensileStrength')?.value || '',
+customDensity: document.getElementById('customDensity')?.value || '',
+customPrintTemp: document.getElementById('customPrintTemp')?.value || '',
+customBedTemp: document.getElementById('customBedTemp')?.value || '',
+customMaterialNotes: getEditorHTML('customMaterialNotes') || '',
+analysisApproach: document.getElementById('analysisApproach')?.value || 'full_part',
+sectionDimensions: document.getElementById('sectionDimensions')?.value || '',
+analysisNotes: getEditorHTML('analysisNotes') || '',
+estimatedWeight: document.getElementById('estimatedWeight')?.value || '0',
+printTime: document.getElementById('printTime')?.value || '0',
+supportMaterial: document.getElementById('supportMaterial')?.value || '15',
+wasteFactor: document.getElementById('wasteFactor')?.value || '20'
+},
+manufacturingData: {
+process: document.getElementById('manufacturingProcess')?.value || 'fdm',
+postProcessing: Array.from(document.getElementById('postProcessing')?.selectedOptions || []).map(opt => opt.value),
+hourlyRate: document.getElementById('hourlyRate')?.value || '50',
+postProcessingCost: document.getElementById('postProcessingCost')?.value || '100',
+setupCost: document.getElementById('setupCost')?.value || '50',
+postProcessingTime: document.getElementById('postProcessingTime')?.value || '8',
+finishingTime: document.getElementById('finishingTime')?.value || '4',
+keyFindings: getEditorHTML('keyFindings') || '',
+manufacturingAdvantages: getEditorHTML('manufacturingAdvantages') || '',
+nextSteps: getEditorHTML('nextSteps') || ''
+},
+editorContents: appState.editorContents
+};
+
+// Convert to JSON string
+const jsonString = JSON.stringify(formData, null, 2);
+
+// Create a blob with the JSON data
+const blob = new Blob([jsonString], { type: 'application/json' });
+const url = URL.createObjectURL(blob);
+
+// Generate a filename
+const projectName = formData.partData.projectRef || "3D_Print_Analysis";
+const safeProjectName = projectName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+const filename = `${safeProjectName}_${timestamp}.json`;
+
+// Create a temporary link element to trigger the download
+const link = document.createElement('a');
+link.href = url;
+link.download = filename;
+document.body.appendChild(link);
+
+// Trigger the download
+link.click();
+
+// Clean up
+document.body.removeChild(link);
+URL.revokeObjectURL(url);
+
+// Show success notification
+showNotification('Project data exported successfully', 'success');
+}
+
+function importProjectData() {
+// Create a file input element
+const fileInput = document.createElement('input');
+fileInput.type = 'file';
+fileInput.accept = '.json';
+
+// Add a change event listener to handle the selected file
+fileInput.addEventListener('change', (event) => {
+const file = event.target.files[0];
+if (!file) return;
+
+// Show loading indicator
+const loadingOverlay = document.createElement('div');
+loadingOverlay.className = 'pdf-loading-overlay';
+loadingOverlay.innerHTML = `
+<div class="pdf-spinner"></div>
+<p style="color: white; font-size: 18px; margin-top: 20px;">Loading project data...</p>
+`;
+document.body.appendChild(loadingOverlay);
+
+// Read the file contents
+const reader = new FileReader();
+reader.onload = (event) => {
+try {
+// Parse the JSON data
+const importedData = JSON.parse(event.target.result);
+
+// Validate the data structure
+if (!importedData.partData || !importedData.analysisData || !importedData.manufacturingData) {
+throw new Error('Invalid project file format');
+}
+
+// Apply the imported data to form fields
+applyImportedData(importedData);
+
+// Switch to the saved view
+if (importedData.currentView) {
+switchView(importedData.currentView);
+}
+
+// Remove loading indicator
+document.body.removeChild(loadingOverlay);
+
+// Show success notification
+showNotification('Project data imported successfully', 'success');
+} catch (error) {
+// Remove loading indicator
+document.body.removeChild(loadingOverlay);
+
+// Show error notification
+console.error('Error importing project data:', error);
+showNotification('Error importing project data. Please check the file format.', 'error');
+}
+};
+
+reader.onerror = () => {
+// Remove loading indicator
+document.body.removeChild(loadingOverlay);
+
+// Show error notification
+showNotification('Error reading the file. Please try again.', 'error');
+};
+
+// Read the file as text
+reader.readAsText(file);
+});
+
+// Trigger the file selection dialog
+fileInput.click();
+}
+
+function applyImportedData(data) {
+// Apply part data
+if (data.partData) {
+document.getElementById('clientName').value = data.partData.clientName || '';
+document.getElementById('projectRef').value = data.partData.projectRef || '';
+document.getElementById('partDescription').innerHTML = data.partData.partDescription || '';
+document.getElementById('partDimensions').value = data.partData.partDimensions || '';
+document.getElementById('currentMethod').value = data.partData.currentMethod || 'moulding';
+document.getElementById('otherMethodText').value = data.partData.otherMethodText || '';
+document.getElementById('analysisPurpose').value = data.partData.analysisPurpose || 'cost_reduction';
+toggleOtherMethod();
+}
+
+// Apply analysis data
+if (data.analysisData) {
+document.getElementById('materialType').value = data.analysisData.materialType || 'pc_cf';
+document.getElementById('materialCost').value = data.analysisData.materialCost || '25';
+document.getElementById('customMaterialName').value = data.analysisData.customMaterialName || '';
+document.getElementById('customMaterialSupplier').value = data.analysisData.customMaterialSupplier || '';
+document.getElementById('customTensileStrength').value = data.analysisData.customTensileStrength || '';
+document.getElementById('customDensity').value = data.analysisData.customDensity || '';
+document.getElementById('customPrintTemp').value = data.analysisData.customPrintTemp || '';
+document.getElementById('customBedTemp').value = data.analysisData.customBedTemp || '';
+document.getElementById('customMaterialNotes').innerHTML = data.analysisData.customMaterialNotes || '';
+document.getElementById('analysisApproach').value = data.analysisData.analysisApproach || 'full_part';
+document.getElementById('sectionDimensions').value = data.analysisData.sectionDimensions || '';
+document.getElementById('analysisNotes').innerHTML = data.analysisData.analysisNotes || '';
+document.getElementById('estimatedWeight').value = data.analysisData.estimatedWeight || '0';
+document.getElementById('printTime').value = data.analysisData.printTime || '0';
+document.getElementById('supportMaterial').value = data.analysisData.supportMaterial || '15';
+document.getElementById('wasteFactor').value = data.analysisData.wasteFactor || '20';
+toggleCustomMaterial();
+updateMaterialProperties();
+}
+
+// Apply manufacturing data
+if (data.manufacturingData) {
+document.getElementById('manufacturingProcess').value = data.manufacturingData.process || 'fdm';
+
+// Handle multi-select for post-processing
+const postProcessingSelect = document.getElementById('postProcessing');
+if (postProcessingSelect && data.manufacturingData.postProcessing) {
+Array.from(postProcessingSelect.options).forEach(option => {
+option.selected = data.manufacturingData.postProcessing.includes(option.value);
+});
+}
+document.getElementById('hourlyRate').value = data.manufacturingData.hourlyRate || '50';
+document.getElementById('postProcessingCost').value = data.manufacturingData.postProcessingCost || '100';
+document.getElementById('setupCost').value = data.manufacturingData.setupCost || '50';
+document.getElementById('postProcessingTime').value = data.manufacturingData.postProcessingTime || '8';
+document.getElementById('finishingTime').value = data.manufacturingData.finishingTime || '4';
+document.getElementById('keyFindings').innerHTML = data.manufacturingData.keyFindings || '';
+document.getElementById('manufacturingAdvantages').innerHTML = data.manufacturingData.manufacturingAdvantages || '';
+document.getElementById('nextSteps').innerHTML = data.manufacturingData.nextSteps || '';
+}
+
+// Update editor contents in app state
+if (data.editorContents) {
+appState.editorContents = data.editorContents;
+}
+
+// Update calculations after loading data
+updateCalculations();
+}
+
+// Show notification function
+function showNotification(message, type = 'info') {
+// Remove any existing notifications
+const existingNotifications = document.querySelectorAll('.notification');
+existingNotifications.forEach(notification => {
+document.body.removeChild(notification);
+});
+
+// Create notification element
+const notification = document.createElement('div');
+notification.className = `notification notification-${type}`;
+notification.innerHTML = `
+<div class="notification-content">
+<span>${message}</span>
+<button class="notification-close">&times;</button>
+</div>
+`;
+document.body.appendChild(notification);
+
+// Add close button functionality
+notification.querySelector('.notification-close').addEventListener('click', () => {
+document.body.removeChild(notification);
+});
+
+// Auto remove after 5 seconds
+setTimeout(() => {
+if (document.body.contains(notification)) {
+document.body.removeChild(notification);
+}
+}, 5000);
+}
+
+// Remove file function
+function removeFile(button, type, fileName) {
+const fileItem = button.closest('.file-item');
+fileItem.remove();
+
+// Remove from state
+if (type === 'model') {
+appState.uploadedFiles.modelFile = null;
+document.getElementById('modelViewerContainer').style.display = 'none';
+cleanup3DViewer();
+} else if (type === 'image') {
+appState.uploadedFiles.referenceImages = appState.uploadedFiles.referenceImages.filter(f => f.name !== fileName);
+// Remove image preview
+const previews = document.querySelectorAll('#uploadedFiles .image-item');
+previews.forEach(preview => {
+const img = preview.querySelector('img');
+if (img && img.alt === fileName) {
+preview.remove();
+}
+});
+} else if (type === 'datasheet') {
+appState.uploadedFiles.materialDatasheet = null;
+document.getElementById('pdfViewerContainer').style.display = 'none';
+}
+}
+
+// 3D Model Viewer Functions
+function load3DModel(file) {
+const reader = new FileReader();
+reader.onload = function(e) {
+const arrayBuffer = e.target.result;
+init3DViewer(arrayBuffer);
+};
+reader.readAsArrayBuffer(file);
+}
+
+function init3DViewer(modelData) {
+try {
+const container = document.getElementById('modelViewer');
+container.innerHTML = ''; // Clear placeholder
+
+// Clean up existing viewer if any
+cleanup3DViewer();
+
+// Scene setup
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a1a1a);
+appState.viewers.modelScene = scene;
+
+// Camera setup
+const camera = new THREE.PerspectiveCamera(
+45,
+container.clientWidth / container.clientHeight,
+0.1,
+10000
+);
+appState.viewers.modelCamera = camera;
+
+// Renderer setup
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(container.clientWidth, container.clientHeight);
+container.appendChild(renderer.domElement);
+appState.viewers.modelRenderer = renderer;
+
+// Lighting
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+scene.add(ambientLight);
+
+const directionalLight1 = new THREE.DirectionalLight(0xffffff, 0.5);
+directionalLight1.position.set(10, 10, 10);
+scene.add(directionalLight1);
+
+const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.3);
+directionalLight2.position.set(-10, -10, -10);
+scene.add(directionalLight2);
+
+// Load STL model
+const loader = new THREE.STLLoader();
+const geometry = loader.parse(modelData);
+
+// Material with purple tint matching the theme
+const material = new THREE.MeshPhongMaterial({
+color: 0xa74e9e,
+specular: 0x111111,
+shininess: 200,
+opacity: 0.9,
+transparent: true
+});
+
+const mesh = new THREE.Mesh(geometry, material);
+
+// Center and scale model
+geometry.computeBoundingBox();
+const boundingBox = geometry.boundingBox;
+const center = new THREE.Vector3();
+boundingBox.getCenter(center);
+mesh.geometry.center();
+
+// Calculate scale
+const size = new THREE.Vector3();
+boundingBox.getSize(size);
+const maxDim = Math.max(size.x, size.y, size.z);
+const scale = 200 / maxDim;
+mesh.scale.set(scale, scale, scale);
+
+scene.add(mesh);
+
+// Position camera
+const distance = maxDim * 2;
+camera.position.set(distance, distance, distance);
+camera.lookAt(0, 0, 0);
+
+// Add wireframe overlay for better visualization
+const wireframeGeometry = new THREE.WireframeGeometry(geometry);
+const wireframeMaterial = new THREE.LineBasicMaterial({ 
+color: 0x333333, 
+linewidth: 1,
+opacity: 0.3,
+transparent: true
+});
+const wireframe = new THREE.LineSegments(wireframeGeometry, wireframeMaterial);
+wireframe.scale.copy(mesh.scale);
+scene.add(wireframe);
+
+// Simple controls
+let mouseX = 0, mouseY = 0;
+let targetRotationX = 0, targetRotationY = 0;
+let mouseDown = false;
+
+container.addEventListener('mousedown', () => mouseDown = true);
+container.addEventListener('mouseup', () => mouseDown = false);
+container.addEventListener('mouseleave', () => mouseDown = false);
+
+container.addEventListener('mousemove', (event) => {
+if (!mouseDown) return;
+const rect = container.getBoundingClientRect();
+mouseX = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+mouseY = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+targetRotationY = mouseX * Math.PI * 2;
+targetRotationX = mouseY * Math.PI;
+});
+
+// Mouse wheel zoom
+container.addEventListener('wheel', (event) => {
+event.preventDefault();
+const zoomSpeed = 0.1;
+const scale = event.deltaY > 0 ? 1 + zoomSpeed : 1 - zoomSpeed;
+camera.position.multiplyScalar(scale);
+});
+
+// Animation loop
+function animate() {
+appState.viewers.modelAnimationId = requestAnimationFrame(animate);
+
+// Smooth rotation
+mesh.rotation.y += (targetRotationY - mesh.rotation.y) * 0.05;
+mesh.rotation.x += (targetRotationX - mesh.rotation.x) * 0.05;
+wireframe.rotation.copy(mesh.rotation);
+
+// Auto-rotate when not interacting
+if (!mouseDown) {
+mesh.rotation.y += 0.005;
+wireframe.rotation.y += 0.005;
+}
+
+renderer.render(scene, camera);
+}
+animate();
+
+// Handle resize
+window.addEventListener('resize', () => {
+if (appState.viewers.modelCamera && appState.viewers.modelRenderer) {
+const container = document.getElementById('modelViewer');
+appState.viewers.modelCamera.aspect = container.clientWidth / container.clientHeight;
+appState.viewers.modelCamera.updateProjectionMatrix();
+appState.viewers.modelRenderer.setSize(container.clientWidth, container.clientHeight);
+}
+});
+
+// Add success message
+const controlsDiv = container.querySelector('.model-controls');
+if (controlsDiv) {
+const successMsg = document.createElement('p');
+successMsg.style.color = '#28a745';
+successMsg.style.marginTop = '5px';
+successMsg.textContent = '✓ Model loaded successfully';
+controlsDiv.appendChild(successMsg);
+}
+
+} catch (error) {
+console.error('Error loading 3D model:', error);
+const container = document.getElementById('modelViewer');
+container.innerHTML = `
+<div class="viewer-error">
+<p style="font-weight: bold;">Error Loading 3D Model</p>
+<p class="mt-2">The STL file could not be loaded. This might be due to:</p>
+<ul style="text-align: left; margin-top: 10px;">
+<li>Corrupted or invalid STL file</li>
+<li>File size too large for browser rendering</li>
+<li>Unsupported STL format</li>
+</ul>
+<p class="mt-3" style="color: var(--primary-color);">The file has still been uploaded and can be used for analysis.</p>
+</div>
+`;
+}
+}
+
+function cleanup3DViewer() {
+if (appState.viewers.modelAnimationId) {
+cancelAnimationFrame(appState.viewers.modelAnimationId);
+}
+if (appState.viewers.modelRenderer) {
+appState.viewers.modelRenderer.dispose();
+}
+appState.viewers.modelScene = null;
+appState.viewers.modelRenderer = null;
+appState.viewers.modelCamera = null;
+appState.viewers.modelAnimationId = null;
+}
+
+// PDF Viewer Functions
+function displayPDF(file) {
+// Just show the upload status
+const container = document.getElementById('pdfViewerContainer');
+const fileNameElement = document.getElementById('datasheetFileName');
+
+if (container && fileNameElement) {
+container.style.display = 'block';
+fileNameElement.textContent = `File: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+}
+}
+
+// Material properties update
+function updateMaterialProperties() {
+const materialTypeSelect = document.getElementById('materialType');
+const propertiesDiv = document.getElementById('materialProperties');
+
+if (!materialTypeSelect || !propertiesDiv) {
+return;
+}
+
+const materialType = materialTypeSelect.value;
+
+const materials = {
+'pc_cf': {
+name: 'PC-Carbon Fiber (Dahltram C-250CF)',
+properties: {
+'Tensile Strength': '132.4 MPa',
+'Flexural Strength': '180 MPa',
+'Density': '1.21 g/cc',
+'HDT (1.82 MPa)': '144°C',
+'Fiber Content': '20% Carbon Fiber'
+},
+description: 'Medium temperature additive manufacturing polymer with carbon fiber reinforcement for enhanced strength and stiffness.'
+},
+'abs_cf': {
+name: 'ABS-Carbon Fiber',
+properties: {
+'Tensile Strength': '110 MPa',
+'Flexural Strength': '140 MPa',
+'Density': '1.15 g/cc',
+'Print Temperature': '260°C'
+},
+description: 'Carbon fiber reinforced ABS for improved mechanical properties.'
+},
+'peek': {
+name: 'PEEK',
+properties: {
+'Tensile Strength': '100 MPa',
+'Flexural Strength': '165 MPa',
+'Density': '1.31 g/cc',
+'Melting Point': '343°C'
+},
+description: 'High-performance thermoplastic for demanding applications.'
+},
+'peek_cf': {
+name: 'PEEK-Carbon Fiber',
+properties: {
+'Tensile Strength': '150 MPa',
+'Flexural Strength': '200 MPa',
+'Density': '1.40 g/cc',
+'Melting Point': '343°C'
+},
+description: 'Carbon fiber reinforced PEEK for extreme applications.'
+},
+'pei': {
+name: 'PEI (Ultem)',
+properties: {
+'Tensile Strength': '85 MPa',
+'Flexural Strength': '140 MPa',
+'Density': '1.27 g/cc',
+'HDT': '170°C'
+},
+description: 'High-temperature thermoplastic with excellent chemical resistance.'
+},
+'nylon_cf': {
+name: 'Nylon-Carbon Fiber',
+properties: {
+'Tensile Strength': '120 MPa',
+'Flexural Strength': '175 MPa',
+'Density': '1.20 g/cc',
+'Print Temperature': '250°C'
+},
+description: 'Strong and durable carbon fiber reinforced nylon.'
+}
+};
+
+if (materialType === 'custom') {
+propertiesDiv.innerHTML = '<p class="text-dim">Fill in the custom material fields above to define properties.</p>';
+} else if (materials[materialType]) {
+const material = materials[materialType];
+let propertiesHTML = `
+<div class="bg-blue-900 bg-opacity-20 p-4 rounded-lg">
+<h4 class="text-lg font-semibold mb-2">${material.name}</h4>
+<div class="grid grid-cols-2 gap-4">
+`;
+
+Object.entries(material.properties).forEach(([key, value]) => {
+propertiesHTML += `<p><strong>${key}:</strong> ${value}</p>`;
+});
+
+propertiesHTML += `
+</div>
+<p class="mt-2 text-sm text-dim">${material.description}</p>
+</div>
+`;
+propertiesDiv.innerHTML = propertiesHTML;
+} else {
+propertiesDiv.innerHTML = '<p class="text-dim">Material properties will be displayed when specific material is selected.</p>';
+}
+}
+
+// Capture 3D model snapshot
+function capture3DSnapshot() {
+return new Promise((resolve) => {
+if (!appState.viewers.modelRenderer || !appState.viewers.modelScene || !appState.viewers.modelCamera) {
+resolve(null);
+return;
+}
+
+try {
+// Render one frame to ensure the latest state
+appState.viewers.modelRenderer.render(appState.viewers.modelScene, appState.viewers.modelCamera);
+
+// Get the canvas data
+const canvas = appState.viewers.modelRenderer.domElement;
+const dataURL = canvas.toDataURL('image/png');
+resolve(dataURL);
+} catch (error) {
+console.error('Error capturing 3D snapshot:', error);
+resolve(null);
+}
+});
+}
+
+// Calculations with null checks
+function updateCalculations() {
+const weight = parseFloat(document.getElementById('estimatedWeight')?.value || 0);
+const printTime = parseFloat(document.getElementById('printTime')?.value || 0);
+const supportPercent = parseFloat(document.getElementById('supportMaterial')?.value || 15);
+const wastePercent = parseFloat(document.getElementById('wasteFactor')?.value || 20);
+const materialCost = parseFloat(document.getElementById('materialCost')?.value || 25);
+const hourlyRate = parseFloat(document.getElementById('hourlyRate')?.value || 50);
+const postProcessingCost = parseFloat(document.getElementById('postProcessingCost')?.value || 100);
+const setupCost = parseFloat(document.getElementById('setupCost')?.value || 50);
+
+// Material calculations
+const baseMaterial = weight * materialCost;
+const supportMaterial = baseMaterial * (supportPercent / 100);
+const waste = (baseMaterial + supportMaterial) * (wastePercent / 100);
+const totalMaterial = baseMaterial + supportMaterial + waste;
+
+// Processing calculations
+const printCost = printTime * hourlyRate;
+const totalProcessing = printCost + postProcessingCost + setupCost;
+
+// Total cost
+const totalCost = totalMaterial + totalProcessing;
+
+// Update display with null checks
+updateElement('baseMaterialCost', `£${baseMaterial.toFixed(2)}`);
+updateElement('supportMaterialCost', `£${supportMaterial.toFixed(2)}`);
+updateElement('wasteCost', `£${waste.toFixed(2)}`);
+updateElement('totalMaterialCost', `£${totalMaterial.toFixed(2)}`);
+updateElement('totalProcessingCost', `£${totalProcessing.toFixed(2)}`);
+updateElement('totalProjectCost', `£${totalCost.toFixed(2)}`);
+
+// Timeline calculations
+updateElement('calculatedPrintTime', printTime.toFixed(1));
+const postTime = parseFloat(document.getElementById('postProcessingTime')?.value || 8);
+const finishTime = parseFloat(document.getElementById('finishingTime')?.value || 4);
+const totalHours = printTime + postTime + finishTime;
+const totalDays = Math.ceil(totalHours / 8); // Assuming 8-hour workdays
+updateElement('totalLeadTime', totalDays);
+}
+
+function updateElement(id, value) {
+const element = document.getElementById(id);
+if (element) {
+element.textContent = value;
+}
+}
+
+// Generate report with proper null checks
+async function generateReport() {
+const reportContent = document.getElementById('reportContent');
+if (!reportContent) {
+console.error('Report content element not found');
+return;
+}
+
+// Capture 3D model snapshot
+const modelSnapshot = await capture3DSnapshot();
+
+const clientName = document.getElementById('clientName')?.value || 'Client';
+const projectRef = document.getElementById('projectRef')?.value || 'Project';
+const partDescription = getEditorHTML('partDescription') || '<p>Part description not provided</p>';
+
+reportContent.innerHTML = `
+<div class="pdf-content">
+<!-- Report Header -->
+<div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 30px; border-bottom: 3px solid #a74e9e; padding-bottom: 15px; page-break-after: avoid;">
+<div>
+<h1 style="margin: 0; color: #a74e9e; font-size: 28px;">${projectRef}</h1>
+<p style="font-size: 18px; margin: 5px 0; color: #333;">3D Print Part Analysis Report</p>
+<p style="color: #666; margin: 3px 0;">Prepared for: <strong>${clientName}</strong></p>
+<p style="color: #666; margin: 3px 0;">Date: <strong>${new Date().toLocaleDateString()}</strong></p>
+</div>
+<div style="text-align: right;">
+<p style="font-weight: bold; color: #a74e9e; margin: 3px 0; font-size: 16px;">Engineering Analysis</p>
+<p style="color: #666; margin: 3px 0;">3D Printing & Manufacturing</p>
+</div>
+</div>
+
+<!-- Overview Section -->
+<div style="page-break-inside: avoid;">
+<h2>Part Overview</h2>
+<div style="margin-bottom: 20px; font-size: 16px; line-height: 1.6;">${partDescription}</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 25px;">
+<div style="background: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid #a74e9e;">
+<p style="color: #666; font-size: 14px; margin: 0 0 5px 0; font-weight: bold;">Part Dimensions</p>
+<p style="margin: 0; font-size: 16px;"><strong>${document.getElementById('partDimensions')?.value || 'Not specified'}</strong></p>
+</div>
+<div style="background: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid #a74e9e;">
+<p style="color: #666; font-size: 14px; margin: 0 0 5px 0; font-weight: bold;">Current Manufacturing</p>
+<p style="margin: 0; text-transform: capitalize; font-size: 16px;"><strong>${getCurrentManufacturingMethod()}</strong></p>
+</div>
+</div>
+</div>
+
+<!-- Part Visualizations Section -->
+<div style="page-break-inside: avoid;">
+<h2>Part Visualizations</h2>
+${generateImageGalleryForPDF()}
+${modelSnapshot ? generate3DModelSnapshotForPDF(modelSnapshot) : ''}
+${!modelSnapshot && appState.uploadedFiles.modelFile ? generate3DModelPreviewForPDF() : ''}
+</div>
+
+<!-- Material Section -->
+<div style="page-break-inside: avoid;">
+<h2>Material Selection</h2>
+<div class="highlight-box">
+<h3 style="margin-top: 0; color: #a74e9e;">Recommended Material</h3>
+<table class="cost-table" style="margin-bottom: 15px;">
+<tr>
+<td style="text-align: left; font-weight: bold;">Material Type:</td>
+<td style="text-align: left;"><strong>${getMaterialName()}</strong></td>
+</tr>
+<tr>
+<td style="text-align: left; font-weight: bold;">Cost per kg:</td>
+<td style="text-align: left;"><strong>£${document.getElementById('materialCost')?.value || 'N/A'}</strong></td>
+</tr>
+</table>
+${generateMaterialPropertiesForPDF()}
+</div>
+</div>
+
+<!-- Technical Analysis Section -->
+<div style="page-break-inside: avoid;">
+<h2>Technical Analysis</h2>
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 25px;">
+<div>
+<h3>Part Specifications</h3>
+<table class="cost-table">
+<thead>
+<tr><th style="text-align: left;">Parameter</th><th>Value</th></tr>
+</thead>
+<tbody>
+<tr><td style="text-align: left;">Estimated Weight</td><td><strong>${document.getElementById('estimatedWeight')?.value || 0} kg</strong></td></tr>
+<tr><td style="text-align: left;">Print Duration</td><td><strong>${document.getElementById('printTime')?.value || 0} hours</strong></td></tr>
+<tr><td style="text-align: left;">Support Material</td><td><strong>${document.getElementById('supportMaterial')?.value || 0}%</strong></td></tr>
+<tr><td style="text-align: left;">Waste Factor</td><td><strong>${document.getElementById('wasteFactor')?.value || 0}%</strong></td></tr>
+</tbody>
+</table>
+</div>
+<div>
+<h3>Manufacturing Process</h3>
+<table class="cost-table">
+<thead>
+<tr><th style="text-align: left;">Aspect</th><th>Details</th></tr>
+</thead>
+<tbody>
+<tr><td style="text-align: left;">Process</td><td style="text-transform: capitalize;"><strong>${document.getElementById('manufacturingProcess')?.value || 'Not specified'}</strong></td></tr>
+<tr><td style="text-align: left;">Post-Processing</td><td><strong>${getPostProcessingList()}</strong></td></tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+
+${getEditorHTML('analysisNotes') ? `
+<div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 25px 0; border-left: 4px solid #a74e9e; page-break-inside: avoid;">
+<h4 style="margin-top: 0; color: #a74e9e;">Analysis Notes</h4>
+<div style="margin: 0; line-height: 1.6;">${getEditorHTML('analysisNotes')}</div>
+</div>
+` : ''}
+
+<!-- Cost Analysis Section -->
+<div style="page-break-before: always; page-break-inside: avoid;">
+<h2>Cost Analysis</h2>
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 25px;">
+<div>
+<h3>Material Costs</h3>
+<table class="cost-table">
+<thead>
+<tr><th style="text-align: left;">Item</th><th>Cost</th></tr>
+</thead>
+<tbody>
+<tr><td style="text-align: left;">Base Material</td><td><strong>${document.getElementById('baseMaterialCost')?.textContent || '£0'}</strong></td></tr>
+<tr><td style="text-align: left;">Support Material</td><td><strong>${document.getElementById('supportMaterialCost')?.textContent || '£0'}</strong></td></tr>
+<tr><td style="text-align: left;">Waste Allowance</td><td><strong>${document.getElementById('wasteCost')?.textContent || '£0'}</strong></td></tr>
+<tr style="background: rgba(167, 78, 158, 0.2);"><td style="text-align: left; font-weight: bold;">Total Material</td><td><strong>${document.getElementById('totalMaterialCost')?.textContent || '£0'}</strong></td></tr>
+</tbody>
+</table>
+</div>
+<div>
+<h3>Processing Costs</h3>
+<table class="cost-table">
+<thead>
+<tr><th style="text-align: left;">Item</th><th>Cost</th></tr>
+</thead>
+<tbody>
+<tr><td style="text-align: left;">Print Time</td><td><strong>£${(parseFloat(document.getElementById('printTime')?.value || 0) * parseFloat(document.getElementById('hourlyRate')?.value || 50)).toFixed(2)}</strong></td></tr>
+<tr><td style="text-align: left;">Post-Processing</td><td><strong>£${document.getElementById('postProcessingCost')?.value || 0}</strong></td></tr>
+<tr><td style="text-align: left;">Setup & Handling</td><td><strong>£${document.getElementById('setupCost')?.value || 0}</strong></td></tr>
+<tr style="background: rgba(167, 78, 158, 0.2);"><td style="text-align: left; font-weight: bold;">Total Processing</td><td><strong>${document.getElementById('totalProcessingCost')?.textContent || '£0'}</strong></td></tr>
+</tbody>
+</table>
+</div>
+</div>
+
+<div class="total-cost" style="background: #f0f8ff; border: 3px solid #a74e9e; border-radius: 8px; padding: 20px; margin: 25px 0; text-align: center;">
+<div style="display: flex; justify-content: space-between; align-items: center;">
+<span style="font-size: 24px; font-weight: bold;">Total Project Cost:</span>
+<span style="font-size: 28px; font-weight: bold; color: #a74e9e;">${document.getElementById('totalProjectCost')?.textContent || '£0'}</span>
+</div>
+</div>
+</div>
+
+<!-- Timeline Section -->
+<div style="page-break-inside: avoid;">
+<h2>Production Timeline</h2>
+<div class="highlight-box">
+<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; text-align: center;">
+<div style="padding: 15px; background: white; border-radius: 8px; border: 1px solid #ccc;">
+<p style="color: #666; font-size: 14px; margin: 0 0 5px 0; font-weight: bold;">Print Duration</p>
+<p style="font-size: 20px; font-weight: bold; margin: 0; color: #a74e9e;">${document.getElementById('calculatedPrintTime')?.textContent || '0'} hrs</p>
+</div>
+<div style="padding: 15px; background: white; border-radius: 8px; border: 1px solid #ccc;">
+<p style="color: #666; font-size: 14px; margin: 0 0 5px 0; font-weight: bold;">Post-Processing</p>
+<p style="font-size: 20px; font-weight: bold; margin: 0; color: #a74e9e;">${document.getElementById('postProcessingTime')?.value || '0'} hrs</p>
+</div>
+<div style="padding: 15px; background: white; border-radius: 8px; border: 1px solid #ccc;">
+<p style="color: #666; font-size: 14px; margin: 0 0 5px 0; font-weight: bold;">Finishing</p>
+<p style="font-size: 20px; font-weight: bold; margin: 0; color: #a74e9e;">${document.getElementById('finishingTime')?.value || '0'} hrs</p>
+</div>
+<div style="padding: 15px; background: white; border-radius: 8px; border: 1px solid #ccc;">
+<p style="color: #666; font-size: 14px; margin: 0 0 5px 0; font-weight: bold;">Total Lead Time</p>
+<p style="font-size: 24px; font-weight: bold; margin: 0; color: #a74e9e;">${document.getElementById('totalLeadTime')?.textContent || '0'} days</p>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Recommendations -->
+<div style="page-break-inside: avoid;">
+<h2>Recommendations & Conclusions</h2>
+${getEditorHTML('keyFindings') ? `
+<div style="background: #f8f9fa; padding: 25px; border-radius: 8px; border: 2px solid #a74e9e; margin: 25px 0;">
+<h3 style="margin-top: 0; color: #a74e9e;">Key Findings</h3>
+<div style="margin: 0; font-size: 16px; line-height: 1.6;">${getEditorHTML('keyFindings')}</div>
+</div>
+` : ''}
+
+${getEditorHTML('manufacturingAdvantages') ? `
+<div style="background: #e8f5e8; padding: 20px; border-radius: 8px; border-left: 4px solid #28a745; margin: 20px 0;">
+<h4 style="margin-top: 0; color: #28a745;">Manufacturing Advantages</h4>
+<div style="margin: 0; line-height: 1.6;">${getEditorHTML('manufacturingAdvantages')}</div>
+</div>
+` : ''}
+
+${getEditorHTML('nextSteps') ? `
+<div style="background: #fff3cd; padding: 20px; border-radius: 8px; border-left: 4px solid #ffc107; margin: 20px 0;">
+<h4 style="margin-top: 0; color: #856404;">Recommended Next Steps</h4>
+<div style="margin: 0; line-height: 1.6;">${getEditorHTML('nextSteps')}</div>
+</div>
+` : ''}
+
+${!getEditorHTML('keyFindings') && !getEditorHTML('manufacturingAdvantages') && !getEditorHTML('nextSteps') ? `
+<div style="background: #f8f9fa; padding: 25px; border-radius: 8px; border: 2px solid #a74e9e;">
+<p style="margin: 0; font-size: 16px; line-height: 1.6; color: #666; text-align: center;">
+<em>Recommendations section will be populated when analysis notes are added in the manufacturing section.</em>
+</p>
+</div>
+` : ''}
+</div>
+
+${await generateDatasheetSectionForPDF()}
+</div>
+`;
+}
+
+// Initialize the application
+document.addEventListener('DOMContentLoaded', function() {
+// Make functions globally available after they're defined
+window.generateFullReport = generateReport;
+window.updateAllCalculations = updateCalculations;
+window.updateMaterialPropertiesDisplay = updateMaterialProperties;
+
+setupFileUploads();
+updateMaterialProperties();
+updateCalculations();
+updateStepIndicator('overview');
+
+// PDF Export button
+const exportBtn = document.getElementById('exportPDF');
+if (exportBtn) {
+exportBtn.addEventListener('click', exportReportToPDF);
+}
+
+// Add event listeners for real-time updates
+const inputs = ['estimatedWeight', 'printTime', 'supportMaterial', 'wasteFactor', 'hourlyRate', 'postProcessingCost', 'setupCost', 'materialCost', 'postProcessingTime', 'finishingTime'];
+inputs.forEach(inputId => {
+const element = document.getElementById(inputId);
+if (element) {
+element.addEventListener('input', updateCalculations);
+}
+});
+
+// Material type change listener
+const materialTypeSelect = document.getElementById('materialType');
+if (materialTypeSelect) {
+materialTypeSelect.addEventListener('change', function() {
+toggleCustomMaterial();
+updateCalculations();
+});
+}
+
+// Manufacturing method change listener
+const currentMethodSelect = document.getElementById('currentMethod');
+if (currentMethodSelect) {
+currentMethodSelect.addEventListener('change', toggleOtherMethod);
+}
+
+// Setup keyboard shortcuts for rich text editors
+setupKeyboardShortcuts();
+
+// Fix any existing list styling on page load
+setTimeout(() => {
+const editors = document.querySelectorAll('.rich-text-editor');
+editors.forEach(editor => {
+fixListStyling(editor);
+});
+}, 100);
+});
+
+// Setup keyboard shortcuts for formatting
+function setupKeyboardShortcuts() {
+const editors = document.querySelectorAll('.rich-text-editor');
+editors.forEach(editor => {
+// Handle placeholder
+editor.addEventListener('focus', function() {
+if (this.innerHTML === '' || this.innerHTML === '<br>') {
+this.innerHTML = '';
+}
+});
+
+editor.addEventListener('blur', function() {
+if (this.innerHTML === '' || this.innerHTML === '<br>') {
+this.innerHTML = '';
+}
+});
+
+// Keyboard shortcuts
+editor.addEventListener('keydown', function(e) {
+if (e.ctrlKey || e.metaKey) {
+switch(e.key.toLowerCase()) {
+case 'b':
+e.preventDefault();
+document.execCommand('bold', false, null);
+break;
+case 'i':
+e.preventDefault();
+document.execCommand('italic', false, null);
+break;
+case 'u':
+e.preventDefault();
+document.execCommand('underline', false, null);
+break;
+}
+}
+});
+
+// Auto-save content on input
+editor.addEventListener('input', function() {
+saveEditorContent(this.id);
+});
+});
+}
+
+// Function to fix list styling
+function fixListStyling(editor) {
+const ulLists = editor.querySelectorAll('ul');
+ulLists.forEach(list => {
+list.style.listStyleType = 'disc';
+list.style.listStylePosition = 'outside';
+list.style.marginLeft = '30px';
+list.style.paddingLeft = '0';
+});
+
+const olLists = editor.querySelectorAll('ol');
+olLists.forEach(list => {
+list.style.listStyleType = 'decimal';
+list.style.listStylePosition = 'outside';
+list.style.marginLeft = '30px';
+list.style.paddingLeft = '0';
+});
+
+const listItems = editor.querySelectorAll('li');
+listItems.forEach(item => {
+item.style.display = 'list-item';
+});
+}
+</script>
+
+</body>
+</html>-grid { 
+display: grid !important; 
+grid-template-columns: repeat(2, 1fr) !important; 
+gap: 20px !important; 
+margin: 25px 0 !important;
+page-break-inside: avoid !important;
+}
+.pdf-export .image-item-pdf { 
+border: 2px solid #a74e9e !important; 
+border-radius: 8px !important; 
+overflow: hidden !important;
+page-break-inside: avoid !important;
+}
+.pdf-export .image
